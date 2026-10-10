@@ -150,5 +150,4 @@ pnpm tauri build
 - **窗口控制按钮（最小化/最大化/关闭）由前端标题栏自绘**（`apps/desktop/src/App.vue` 的 `.window-controls`）：框架沿用 dbx 的 Overlay 无边框标题栏，Windows 原生按钮被隐藏，必须由前端补齐；关闭按钮走框架关闭状态机（默认隐藏到托盘）。业务替换 `App.vue` 时保留这段标题栏即可。
 - **构建正式版/安装包必须用 `pnpm tauri build`（tauri CLI 会注入正式构建标记）。不要直接用 `cargo build --release` 构建 `src-tauri`**——那样 tauri-build 会把它编译成**开发模式**，窗口会加载 `localhost:1420`（没有本地 dev server 时显示"无法访问此页面"）。分发的 exe 一律从 `tauri build` 的产物（`target\release\bundle\` 或 `target\release\myapp.exe`）取。
 - 本框架沿用了 dbx 的"关闭=隐藏到托盘"交互，退出请用托盘图标右键 → 退出，不要直接强杀进程（强杀可能残留 single-instance 管道，导致下一次启动窗口被恢复到屏幕外不可见；若遇到"双击没反应/窗口不见了"，先到任务管理器结束残留的 MyApp 进程再启动）。
-- `scripts/dev-backend.ps1`、`scripts/dev-full.ps1`、`scripts/release-lock.mjs`、`scripts/release-node-packages.mjs` 为 dbx 遗留的已废弃占位文件，可删除；
 - 依赖 dbx 的 Apache-2.0 许可，使用/分发时请保留相应版权声明。

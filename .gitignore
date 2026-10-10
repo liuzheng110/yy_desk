@@ -37,8 +37,3 @@ logs/
 
 # Local portable build output
 portable/
-
-# Scratch / debug artifacts
-check_proc.txt
-exe_icon_check*.png
-icon-transparent-v*.png

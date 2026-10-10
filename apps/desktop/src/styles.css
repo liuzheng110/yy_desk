@@ -260,6 +260,50 @@ body {
   border-color: #1d4ed8;
 }
 
+/* ---- 通用按钮（业务页面，如 MCP 面板）---- */
+.tb-btn {
+  padding: 5px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #374151;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.tb-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+  color: #111827;
+}
+
+.tb-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.tb-btn.primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+  font-weight: 600;
+}
+
+.tb-btn.primary:hover:not(:disabled) {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+
+.tb-btn.small-btn {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
 /* ---- 主体：侧边导航 + 内容区 ---- */
 .body {
   flex: 1 1 auto;
@@ -325,8 +369,12 @@ body {
   min-width: 0;
   overflow-y: auto;
   padding: 20px 24px;
-  max-width: 960px;
   user-select: text;
+}
+
+/* 限宽只作用于内容本身，滚动条仍然贴住窗口右缘 */
+.content > * {
+  max-width: 960px;
 }
 
 .content h1 {

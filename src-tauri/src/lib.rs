@@ -358,6 +358,7 @@ pub fn run() {
         .manage(AppLocaleState::new())
         .manage(commands::deep_link::DeepLinkOpenState::new())
         .manage(commands::external_files::new_external_file_open_state())
+        .manage(commands::update::PendingUpdateState::default())
         .on_page_load(|webview, payload| {
             if payload.event() == PageLoadEvent::Started {
                 if let Some(state) = webview.app_handle().try_state::<CloseBehaviorState>() {

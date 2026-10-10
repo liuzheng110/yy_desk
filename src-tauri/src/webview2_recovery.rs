@@ -254,7 +254,10 @@ impl WebView2Recovery {
                 let window = self.policy.unresponsive_window;
                 let window_expired = self
                     .unresponsive_window_start
-                    .map(|start| now.checked_duration_since(start).is_some_and(|elapsed| elapsed >= window))
+                    .map(|start| {
+                        now.checked_duration_since(start)
+                            .is_some_and(|elapsed| elapsed >= window)
+                    })
                     .unwrap_or(true);
                 if window_expired {
                     self.unresponsive_window_start = Some(now);
@@ -315,14 +318,20 @@ impl WebView2Recovery {
     /// execution failure.
     fn can_reload(&self, now: Instant) -> ReloadEligibility {
         if let Some(last) = self.last_reload_at {
-            if now.checked_duration_since(last).is_none_or(|elapsed| elapsed < self.policy.reload_cooldown) {
+            if now
+                .checked_duration_since(last)
+                .is_none_or(|elapsed| elapsed < self.policy.reload_cooldown)
+            {
                 return ReloadEligibility::Cooldown;
             }
         }
         let active = self
             .reload_timestamps
             .iter()
-            .filter(|ts| now.checked_duration_since(**ts).is_none_or(|elapsed| elapsed < self.policy.reload_window))
+            .filter(|ts| {
+                now.checked_duration_since(**ts)
+                    .is_none_or(|elapsed| elapsed < self.policy.reload_window)
+            })
             .count();
         if active >= self.policy.max_reloads_in_window as usize {
             return ReloadEligibility::BudgetExhausted;
@@ -338,7 +347,10 @@ impl WebView2Recovery {
         // period resets the budget and unrelated failures hours apart never
         // permanently disable recovery.
         while let Some(&ts) = self.reload_timestamps.front() {
-            if now.checked_duration_since(ts).is_some_and(|elapsed| elapsed >= self.policy.reload_window) {
+            if now
+                .checked_duration_since(ts)
+                .is_some_and(|elapsed| elapsed >= self.policy.reload_window)
+            {
                 self.reload_timestamps.pop_front();
             } else {
                 break;
@@ -363,7 +375,10 @@ impl WebView2Recovery {
         let active = self
             .reload_timestamps
             .iter()
-            .filter(|ts| now.checked_duration_since(**ts).is_none_or(|elapsed| elapsed < self.policy.reload_window))
+            .filter(|ts| {
+                now.checked_duration_since(**ts)
+                    .is_none_or(|elapsed| elapsed < self.policy.reload_window)
+            })
             .count();
         (active as u32, self.policy.max_reloads_in_window)
     }
@@ -413,7 +428,9 @@ fn recovery_log_message(action: RecoveryAction, detail: RecoveryDetail, info: &W
         "recovery decision={action:?} detail={detail:?} kind={:?} reason={} exit_code={} process={} frames={}",
         info.kind,
         info.reason.as_deref().unwrap_or("-"),
-        info.exit_code.map(|code| code.to_string()).unwrap_or_else(|| "-".to_string()),
+        info.exit_code
+            .map(|code| code.to_string())
+            .unwrap_or_else(|| "-".to_string()),
         info.process_description.as_deref().unwrap_or("-"),
         info.affected_frames,
     )
@@ -450,7 +467,9 @@ fn reload_execution_log_message(
     let result = if error.is_none() { "success" } else { "failed" };
     let budget_commit = matches!(disposition, ReloadDisposition::Committed);
     let escalate = matches!(disposition, ReloadDisposition::EscalateRestart);
-    let failure = error.map(|error| format!("{error:?}")).unwrap_or_else(|| "-".to_string());
+    let failure = error
+        .map(|error| format!("{error:?}"))
+        .unwrap_or_else(|| "-".to_string());
     format!(
         "recovery decision=Reload kind={:?} execution={stage} result={result} error={} budget_commit={budget_commit} budget={budget_active}/{budget_max} escalate={escalate}",
         info.kind,
@@ -610,7 +629,13 @@ mod tests {
     }
 
     fn info(kind: WebView2ProcessFailedKind) -> WebView2ProcessFailedInfo {
-        WebView2ProcessFailedInfo { kind, reason: None, exit_code: None, process_description: None, affected_frames: 0 }
+        WebView2ProcessFailedInfo {
+            kind,
+            reason: None,
+            exit_code: None,
+            process_description: None,
+            affected_frames: 0,
+        }
     }
 
     fn base() -> Instant {
@@ -643,11 +668,15 @@ mod tests {
         let mut recovery = WebView2Recovery::new(WebView2RecoveryPolicy::default());
         let t0 = base();
         assert_eq!(
-            recovery.handle_process_failed(&info(WebView2ProcessFailedKind::Browser), t0).0,
+            recovery
+                .handle_process_failed(&info(WebView2ProcessFailedKind::Browser), t0)
+                .0,
             RecoveryAction::Restart
         );
         assert_eq!(
-            recovery.handle_process_failed(&info(WebView2ProcessFailedKind::Browser), at(t0, 1)).0,
+            recovery
+                .handle_process_failed(&info(WebView2ProcessFailedKind::Browser), at(t0, 1))
+                .0,
             RecoveryAction::LogOnly
         );
     }
@@ -673,7 +702,10 @@ mod tests {
         let (action, detail) =
             recovery.handle_process_failed(&info(WebView2ProcessFailedKind::RendererUnresponsive), base());
         assert_eq!(action, RecoveryAction::LogOnly);
-        assert_eq!(detail, RecoveryDetail::RendererUnresponsiveArmed { count: 1, threshold: 3 });
+        assert_eq!(
+            detail,
+            RecoveryDetail::RendererUnresponsiveArmed { count: 1, threshold: 3 }
+        );
     }
 
     #[test]
@@ -684,16 +716,28 @@ mod tests {
             let (action, detail) =
                 recovery.handle_process_failed(&info(WebView2ProcessFailedKind::RendererUnresponsive), at(t0, offset));
             assert_eq!(action, RecoveryAction::LogOnly);
-            assert_eq!(detail, RecoveryDetail::RendererUnresponsiveArmed { count: expected_count, threshold: 3 });
+            assert_eq!(
+                detail,
+                RecoveryDetail::RendererUnresponsiveArmed {
+                    count: expected_count,
+                    threshold: 3
+                }
+            );
         }
         let (action, detail) =
             recovery.handle_process_failed(&info(WebView2ProcessFailedKind::RendererUnresponsive), at(t0, 40));
         assert_eq!(action, RecoveryAction::Reload);
-        assert_eq!(detail, RecoveryDetail::RendererUnresponsiveTriggered { count: 3, threshold: 3 });
+        assert_eq!(
+            detail,
+            RecoveryDetail::RendererUnresponsiveTriggered { count: 3, threshold: 3 }
+        );
         let (action, detail) =
             recovery.handle_process_failed(&info(WebView2ProcessFailedKind::RendererUnresponsive), at(t0, 50));
         assert_eq!(action, RecoveryAction::LogOnly);
-        assert_eq!(detail, RecoveryDetail::RendererUnresponsiveArmed { count: 1, threshold: 3 });
+        assert_eq!(
+            detail,
+            RecoveryDetail::RendererUnresponsiveArmed { count: 1, threshold: 3 }
+        );
     }
 
     #[test]
@@ -711,7 +755,10 @@ mod tests {
         let (action, detail) =
             recovery.handle_process_failed(&info(WebView2ProcessFailedKind::RendererUnresponsive), at(t0, 120));
         assert_eq!(action, RecoveryAction::LogOnly);
-        assert_eq!(detail, RecoveryDetail::RendererUnresponsiveArmed { count: 1, threshold: 3 });
+        assert_eq!(
+            detail,
+            RecoveryDetail::RendererUnresponsiveArmed { count: 1, threshold: 3 }
+        );
     }
 
     #[test]
@@ -811,10 +858,16 @@ mod tests {
         // Note: each `lock().method()` uses a temporary guard dropped at the
         // end of its statement, so no guard is held across a re-lock (which
         // would deadlock).
-        assert_eq!(recovery.lock().unwrap().can_reload(at(t0, 120)), ReloadEligibility::Allowed);
+        assert_eq!(
+            recovery.lock().unwrap().can_reload(at(t0, 120)),
+            ReloadEligibility::Allowed
+        );
         // ... and a subsequent success still fits in the third slot.
         recovery.lock().unwrap().record_reload_success(at(t0, 180));
-        assert_eq!(recovery.lock().unwrap().can_reload(at(t0, 240)), ReloadEligibility::BudgetExhausted);
+        assert_eq!(
+            recovery.lock().unwrap().can_reload(at(t0, 240)),
+            ReloadEligibility::BudgetExhausted
+        );
     }
 
     #[test]
@@ -875,8 +928,15 @@ mod tests {
         // never permanently consumed across the WebView lifetime.
         for hour in 0..10 {
             let now = at(t0, hour * 3600);
-            assert_eq!(recovery.lock().unwrap().can_reload(now), ReloadEligibility::Allowed, "hour {hour}");
-            assert_eq!(settle_reload_execution(&recovery, now, None), ReloadDisposition::Committed);
+            assert_eq!(
+                recovery.lock().unwrap().can_reload(now),
+                ReloadEligibility::Allowed,
+                "hour {hour}"
+            );
+            assert_eq!(
+                settle_reload_execution(&recovery, now, None),
+                ReloadDisposition::Committed
+            );
         }
     }
 
@@ -891,7 +951,10 @@ mod tests {
         )));
         let t0 = base();
         // Two armed events inside the 60s window...
-        recovery.lock().unwrap().handle_process_failed(&info(WebView2ProcessFailedKind::RendererUnresponsive), t0);
+        recovery
+            .lock()
+            .unwrap()
+            .handle_process_failed(&info(WebView2ProcessFailedKind::RendererUnresponsive), t0);
         recovery
             .lock()
             .unwrap()
@@ -926,8 +989,14 @@ mod tests {
     fn reload_success_commits_exactly_once() {
         let recovery = mutex(WebView2Recovery::new(WebView2RecoveryPolicy::default()));
         let t0 = base();
-        assert_eq!(settle_reload_execution(&recovery, t0, None), ReloadDisposition::Committed);
-        assert_eq!(settle_reload_execution(&recovery, t0, None), ReloadDisposition::Committed);
+        assert_eq!(
+            settle_reload_execution(&recovery, t0, None),
+            ReloadDisposition::Committed
+        );
+        assert_eq!(
+            settle_reload_execution(&recovery, t0, None),
+            ReloadDisposition::Committed
+        );
         let inner = recovery.lock().unwrap();
         assert_eq!(inner.reload_timestamps.len(), 2);
         assert_eq!(inner.consecutive_reload_execution_failures, 0);
@@ -968,7 +1037,10 @@ mod tests {
             ReloadDisposition::RetryNext
         );
         // A success resets the counter, so the escalation threshold restarts.
-        assert_eq!(settle_reload_execution(&recovery, at(t0, 40), None), ReloadDisposition::Committed);
+        assert_eq!(
+            settle_reload_execution(&recovery, at(t0, 40), None),
+            ReloadDisposition::Committed
+        );
         assert_eq!(
             settle_reload_execution(&recovery, at(t0, 50), Some(ReloadExecError::ReloadError)),
             ReloadDisposition::RetryNext

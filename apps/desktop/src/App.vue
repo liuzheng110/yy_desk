@@ -1,38 +1,24 @@
 <script setup lang="ts">
-// 框架示例壳。这里就是你的业务 UI 的挂载点：
-// 替换本组件的内容，其余（标题栏/关闭行为/更新/设置）保持框架即可。
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { backend, UPDATE_DOWNLOAD_PROGRESS_EVENT } from "./lib/backend";
-import type { DownloadedUpdate, UpdateDownloadProgress, UpdateInfo } from "./lib/backend";
-import McpPanel from "./components/McpPanel.vue";
+// 应用外壳：细标题栏（拖拽 + 窗口控制 + 检查更新）、更新提示条、左侧导航、内容区 <RouterView>。
+// 业务页面放 src/pages/，路由表在 src/router/index.ts；新增页面时在侧边导航里加一个 <RouterLink>。
+import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { RouterLink, RouterView, useRoute } from "vue-router";
+import ErrorBoundary from "@/components/ErrorBoundary.vue";
+import ToastHost from "@/components/ToastHost.vue";
+import { useAppStore } from "@/stores/app";
+import { useUpdaterStore } from "@/stores/updater";
 
-// 启动后延迟自动检查，避免与首帧渲染争抢资源
-const AUTO_CHECK_DELAY_MS = 3000;
+const route = useRoute();
+const app = useAppStore();
+const updater = useUpdaterStore();
 
-const version = ref("");
-const platform = ref("");
-const update = ref<UpdateInfo | null>(null);
-const cachedUpdate = ref<DownloadedUpdate | null>(null);
-const updateState = ref<"idle" | "checking" | "available" | "downloading" | "downloaded" | "none">("idle");
-const updateDismissed = ref(false);
-const updateError = ref("");
-const progress = ref<{ downloaded: number; total: number | null } | null>(null);
-const installing = ref(false);
-// 手动检查的结果反馈（已是最新 / 检查失败），避免“点了没反应”
-const updateNotice = ref<{ kind: "info" | "error"; text: string } | null>(null);
-
-const autostart = ref(false);
-const autostartBusy = ref(false);
-
-// 功能页导航（左侧菜单；后续新增功能页时在此扩展）
-const page = ref<"home" | "settings">("home");
+const contentRef = ref<HTMLElement | null>(null);
 
 const isTauri = typeof window.__TAURI_INTERNALS__ !== "undefined";
 
-let unlistenProgress: UnlistenFn | null = null;
-let autoCheckTimer: number | null = null;
-let noticeTimer: number | null = null;
+function formatSize(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 // ---- 窗口控制（Overlay 标题栏下原生按钮被隐藏，由前端补齐标配）----
 async function minimizeWindow() {
@@ -54,215 +40,19 @@ async function closeWindow() {
   await getCurrentWindow().close();
 }
 
-// ---- 更新（启动自动检查 → 提示条 → 一键下载安装并重启）----
-const updateBannerVisible = computed(
-  () => !updateDismissed.value && ["available", "downloading", "downloaded"].includes(updateState.value),
+// 换页时把内容区滚回顶部（滚动容器是 .content，不是 window）
+watch(
+  () => route.fullPath,
+  () => contentRef.value?.scrollTo({ top: 0 }),
 );
-const updateActionable = computed(() => updateState.value === "available" || updateState.value === "downloaded");
-const progressPercent = computed(() => {
-  const current = progress.value;
-  if (!current || !current.total) return null;
-  return Math.min(100, Math.round((current.downloaded / current.total) * 100));
-});
 
-function formatSize(bytes: number): string {
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function newAttemptId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `attempt-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function showUpdateNotice(kind: "info" | "error", text: string) {
-  updateNotice.value = { kind, text };
-  if (noticeTimer !== null) window.clearTimeout(noticeTimer);
-  noticeTimer = window.setTimeout(
-    () => {
-      updateNotice.value = null;
-      noticeTimer = null;
-    },
-    kind === "error" ? 8000 : 3500,
-  );
-}
-
-function dismissUpdateNotice() {
-  updateNotice.value = null;
-  if (noticeTimer !== null) {
-    window.clearTimeout(noticeTimer);
-    noticeTimer = null;
-  }
-}
-
-async function checkUpdate(manual = false) {
-  if (updateState.value === "checking" || updateState.value === "downloading") return;
-  updateState.value = "checking";
-  updateError.value = "";
-  if (manual) dismissUpdateNotice();
-  try {
-    const info = await backend.checkForUpdates();
-    update.value = info;
-    updateState.value = info.update_available ? "available" : "none";
-    if (manual) updateDismissed.value = false;
-    // 自动检查时静默，只有用户主动点“检查更新”才提示“已是最新”
-    if (!info.update_available && manual) {
-      showUpdateNotice("info", `已是最新版本（v${info.current_version}）`);
-    }
-  } catch (error) {
-    console.error("[UPDATE] check failed", error);
-    const message = String(error);
-    updateError.value = message;
-    updateState.value = "idle";
-    showUpdateNotice("error", `检查更新失败：${message}`);
-  }
-}
-
-// 启动时先看缓存里是否已有校验通过的更新包，避免重复下载。
-async function restoreDownloadedUpdate(): Promise<boolean> {
-  try {
-    const cached = await backend.getDownloadedUpdate();
-    if (!cached) return false;
-    cachedUpdate.value = cached;
-    update.value = {
-      current_version: version.value,
-      latest_version: cached.version,
-      update_available: true,
-      portable_mode: cached.portable_mode,
-      manual_update_only: false,
-      release_name: `MyApp v${cached.version}`,
-      release_url: cached.release_url,
-      release_notes: cached.release_notes,
-    };
-    updateState.value = "downloaded";
-    return true;
-  } catch (error) {
-    console.error("[UPDATE] restore cached update failed", error);
-    return false;
-  }
-}
-
-async function installUpdate() {
-  const cached = cachedUpdate.value;
-  if (!cached) return;
-  installing.value = true;
-  updateError.value = "";
-  try {
-    // 安装成功会重启应用，这里的 Promise 通常不会 resolve。
-    await backend.installDownloadedUpdate(cached.cache_id, cached.version);
-  } catch (error) {
-    console.error("[UPDATE] install failed", error);
-    updateError.value = String(error);
-    installing.value = false;
-  }
-}
-
-async function downloadAndInstall() {
-  const info = update.value;
-  if (!info) return;
-  updateState.value = "downloading";
-  updateError.value = "";
-  progress.value = { downloaded: 0, total: null };
-  updateDismissed.value = false;
-  try {
-    const downloaded = await backend.downloadUpdate(info.latest_version, newAttemptId(), info.release_notes || "");
-    cachedUpdate.value = downloaded;
-    updateState.value = "downloaded";
-    await installUpdate();
-  } catch (error) {
-    console.error("[UPDATE] download failed", error);
-    updateError.value = String(error);
-    updateState.value = "available";
-  }
-}
-
-function onPrimaryUpdateAction() {
-  if (updateState.value === "downloaded") {
-    void installUpdate();
-  } else {
-    void downloadAndInstall();
-  }
-}
-
-async function onUpdateClick() {
-  if (updateState.value === "checking" || updateState.value === "downloading") return;
-  updateDismissed.value = false;
-  if (updateState.value === "available") {
-    await downloadAndInstall();
-    return;
-  }
-  if (updateState.value === "downloaded") {
-    await installUpdate();
-    return;
-  }
-  await checkUpdate(true);
-}
-
-function dismissUpdate() {
-  updateDismissed.value = true;
-}
-
-function updateTitle(): string {
-  switch (updateState.value) {
-    case "checking":
-      return "正在检查更新…";
-    case "available":
-      return `发现新版本 ${update.value?.latest_version ?? ""}，点击下载并重启安装`;
-    case "downloading":
-      return "正在下载更新…";
-    case "downloaded":
-      return "更新已下载，点击重启安装";
-    case "none":
-      return "已是最新版本";
-    default:
-      return "检查更新";
-  }
-}
-
-// ---- 导航：设置按钮跳转到设置功能页 ----
-function openSettings() {
-  page.value = "settings";
-}
-
-function goHome() {
-  page.value = "home";
-}
-
-async function toggleAutostart(event: Event) {
-  const enabled = (event.target as HTMLInputElement).checked;
-  autostartBusy.value = true;
-  try {
-    await backend.setAutostartEnabled(enabled);
-  } catch (error) {
-    console.error("[SETTINGS] set autostart failed", error);
-    autostart.value = !enabled; // 回滚
-  } finally {
-    autostartBusy.value = false;
-  }
-}
-
-onMounted(async () => {
-  version.value = await backend.getAppVersion().catch(() => "?");
-  platform.value = await backend.getPlatform().catch(() => "?");
-  if (!isTauri) return;
-
-  autostart.value = await backend.getAutostartEnabled().catch(() => false);
-
-  unlistenProgress = await listen<UpdateDownloadProgress>(UPDATE_DOWNLOAD_PROGRESS_EVENT, (event) => {
-    progress.value = { downloaded: event.payload.downloaded, total: event.payload.total };
-  });
-
-  if (await restoreDownloadedUpdate()) return;
-  autoCheckTimer = window.setTimeout(() => {
-    void checkUpdate();
-  }, AUTO_CHECK_DELAY_MS);
+onMounted(() => {
+  void app.init();
+  void updater.start();
 });
 
 onBeforeUnmount(() => {
-  unlistenProgress?.();
-  if (autoCheckTimer !== null) window.clearTimeout(autoCheckTimer);
-  if (noticeTimer !== null) window.clearTimeout(noticeTimer);
+  updater.stop();
 });
 </script>
 
@@ -277,16 +67,16 @@ onBeforeUnmount(() => {
         <button
           class="tb-btn-icon"
           :class="{
-            'is-spinning': updateState === 'checking' || updateState === 'downloading',
-            'has-badge': updateState === 'available' || updateState === 'downloaded',
+            'is-spinning': updater.state === 'checking' || updater.state === 'downloading',
+            'has-badge': updater.state === 'available' || updater.state === 'downloaded',
           }"
-          :title="updateTitle()"
-          :aria-label="updateTitle()"
-          :disabled="updateState === 'checking' || updateState === 'downloading'"
-          @click="onUpdateClick"
+          :title="updater.title()"
+          :aria-label="updater.title()"
+          :disabled="updater.state === 'checking' || updater.state === 'downloading'"
+          @click="updater.onClick"
         >
           <svg
-            v-if="updateState === 'available' || updateState === 'downloaded'"
+            v-if="updater.state === 'available' || updater.state === 'downloaded'"
             viewBox="0 0 24 24"
             width="14"
             height="14"
@@ -318,13 +108,7 @@ onBeforeUnmount(() => {
         </button>
 
         <!-- 设置（跳转设置功能页） -->
-        <button
-          class="tb-btn-icon"
-          :class="{ active: page === 'settings' }"
-          title="设置"
-          aria-label="设置"
-          @click="openSettings"
-        >
+        <RouterLink to="/settings" class="tb-btn-icon" active-class="active" title="设置" aria-label="设置">
           <svg
             viewBox="0 0 24 24"
             width="14"
@@ -340,7 +124,7 @@ onBeforeUnmount(() => {
               d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
             />
           </svg>
-        </button>
+        </RouterLink>
 
         <!-- 窗口控制（最小化 / 最大化 / 关闭） -->
         <button class="wc-btn" title="最小化" aria-label="最小化" @click="minimizeWindow">&#x2013;</button>
@@ -350,50 +134,55 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 检查更新反馈：手动检查“已是最新”或检查失败时出现，避免点按钮无反应 -->
-    <div v-if="updateNotice" class="update-notice" :class="updateNotice.kind">
-      <span class="update-notice-text">{{ updateNotice.text }}</span>
-      <button class="update-notice-close" aria-label="关闭提示" @click="dismissUpdateNotice">✕</button>
+    <div v-if="updater.notice" class="update-notice" :class="updater.notice.kind">
+      <span class="update-notice-text">{{ updater.notice.text }}</span>
+      <button class="update-notice-close" aria-label="关闭提示" @click="updater.dismissNotice()">✕</button>
     </div>
 
     <!-- 新版本提示条：启动检测到新版本 / 下载中 / 已下载时出现在标题栏下方 -->
-    <div v-if="updateBannerVisible" class="update-banner">
+    <div v-if="updater.bannerVisible" class="update-banner">
       <div class="update-banner-body">
         <div class="update-banner-title">
-          <template v-if="updateState === 'available'">发现新版本 v{{ update?.latest_version }}</template>
-          <template v-else-if="updateState === 'downloading'">正在下载更新 v{{ update?.latest_version }}…</template>
+          <template v-if="updater.state === 'available'">发现新版本 v{{ updater.info?.latest_version }}</template>
+          <template v-else-if="updater.state === 'downloading'"
+            >正在下载更新 v{{ updater.info?.latest_version }}…</template
+          >
           <template v-else>更新已下载完成，安装后将自动重启</template>
         </div>
 
-        <div v-if="updateState === 'downloading'" class="update-banner-progress">
+        <div v-if="updater.state === 'downloading'" class="update-banner-progress">
           <div class="update-progress-track">
             <div
               class="update-progress-fill"
-              :class="{ indeterminate: progressPercent === null }"
-              :style="progressPercent !== null ? { width: `${progressPercent}%` } : undefined"
+              :class="{ indeterminate: updater.progressPercent === null }"
+              :style="updater.progressPercent !== null ? { width: `${updater.progressPercent}%` } : undefined"
             ></div>
           </div>
           <span class="update-progress-text">
-            <template v-if="progress">
-              {{ formatSize(progress.downloaded) }}<template v-if="progress.total"> / {{ formatSize(progress.total) }}（{{ progressPercent }}%）</template>
+            <template v-if="updater.progress">
+              {{ formatSize(updater.progress.downloaded)
+              }}<template v-if="updater.progress.total">
+                / {{ formatSize(updater.progress.total) }}（{{ updater.progressPercent }}%）</template
+              >
             </template>
             <template v-else>准备中…</template>
           </span>
         </div>
-        <div v-else-if="update?.release_notes" class="update-banner-notes">{{ update.release_notes }}</div>
-        <div v-if="updateError" class="update-banner-error">{{ updateError }}</div>
+        <div v-else-if="updater.info?.release_notes" class="update-banner-notes">{{ updater.info.release_notes }}</div>
+        <div v-if="updater.error" class="update-banner-error">{{ updater.error }}</div>
       </div>
 
       <div class="update-banner-actions">
         <button
-          v-if="updateActionable"
+          v-if="updater.actionable"
           class="update-btn primary"
-          :disabled="installing"
-          @click="onPrimaryUpdateAction"
+          :disabled="updater.installing"
+          @click="updater.primaryAction()"
         >
-          {{ updateState === "downloaded" ? "立即安装并重启" : "立即更新" }}
+          {{ updater.state === "downloaded" ? "立即安装并重启" : "立即更新" }}
         </button>
         <button v-else class="update-btn" disabled>下载中…</button>
-        <button class="update-btn" @click="dismissUpdate">稍后</button>
+        <button class="update-btn" @click="updater.dismiss()">稍后</button>
       </div>
     </div>
 
@@ -401,12 +190,7 @@ onBeforeUnmount(() => {
     <div class="body">
       <aside class="sidebar">
         <nav class="side-nav">
-          <button
-            class="nav-item"
-            :class="{ active: page === 'home' }"
-            title="主功能"
-            @click="goHome"
-          >
+          <RouterLink to="/" class="nav-item" exact-active-class="active" title="主功能">
             <svg
               viewBox="0 0 24 24"
               width="16"
@@ -423,14 +207,9 @@ onBeforeUnmount(() => {
               <rect x="14" y="14" width="7" height="7" rx="1" />
             </svg>
             <span>主功能</span>
-          </button>
+          </RouterLink>
 
-          <button
-            class="nav-item"
-            :class="{ active: page === 'settings' }"
-            title="设置"
-            @click="openSettings"
-          >
+          <RouterLink to="/settings" class="nav-item" active-class="active" title="设置">
             <svg
               viewBox="0 0 24 24"
               width="16"
@@ -447,72 +226,44 @@ onBeforeUnmount(() => {
               />
             </svg>
             <span>设置</span>
-          </button>
+          </RouterLink>
+
+          <RouterLink to="/mcp" class="nav-item" active-class="active" title="MCP 配置">
+            <svg
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 2v6" />
+              <path d="M12 16v6" />
+              <path d="M2 12h6" />
+              <path d="M16 12h6" />
+              <circle cx="12" cy="12" r="3" />
+              <circle cx="12" cy="5" r="1.5" />
+              <circle cx="12" cy="19" r="1.5" />
+              <circle cx="5" cy="12" r="1.5" />
+              <circle cx="19" cy="12" r="1.5" />
+            </svg>
+            <span>MCP 配置</span>
+          </RouterLink>
         </nav>
 
-        <div class="sidebar-footer">v{{ version }}</div>
+        <div class="sidebar-footer">v{{ app.version }}</div>
       </aside>
 
-      <main class="content">
-        <!-- 主功能页 -->
-        <section v-if="page === 'home'" class="page">
-          <h1>MyApp 框架已就绪</h1>
-          <p class="muted">
-            版本 <code>{{ version }}</code> · 平台 <code>{{ platform }}</code>
-          </p>
-          <section class="cards">
-            <div class="card">
-              <h3>四大机制已保留</h3>
-              <ul>
-                <li>自动更新（updater 插件 + GitHub Releases + minisign 验签 + 便携包）</li>
-                <li>安装打包（NSIS，`createUpdaterArtifacts: true` 生成 latest.json）</li>
-                <li>启动机制（单实例 / 深链接 / 启动看门狗 / WebView2 崩溃恢复 / 窗口状态）</li>
-                <li>运行机制（托盘 / 关闭行为状态机 / 数据目录三模式 / 迁移门槛）</li>
-              </ul>
-            </div>
-            <div class="card">
-              <h3>从这里开始写业务</h3>
-              <ol>
-                <li>后端：<code>src-tauri/src/commands/business/</code> 新建命令并在 <code>lib.rs</code> 注册</li>
-                <li>前端：替换 <code>apps/desktop/src/App.vue</code></li>
-                <li>配置：<code>src-tauri/tauri.conf.json</code>（名称 / 更新端点 / 签名公钥）</li>
-              </ol>
-            </div>
-          </section>
-
-          <McpPanel />
-        </section>
-
-        <!-- 设置页 -->
-        <section v-else class="page">
-          <h1>设置</h1>
-          <div class="settings-card">
-            <label class="setting-row" :class="{ busy: autostartBusy }">
-              <input
-                type="checkbox"
-                v-model="autostart"
-                :disabled="autostartBusy"
-                @change="toggleAutostart"
-              />
-              <span>开机启动</span>
-            </label>
-            <div class="setting-row static">
-              <span>应用版本</span>
-              <span class="setting-value">{{ version }}</span>
-            </div>
-            <div class="setting-row static">
-              <span>运行平台</span>
-              <span class="setting-value">{{ platform }}</span>
-            </div>
-            <div class="setting-row static">
-              <span>检查更新</span>
-              <button class="update-btn" :disabled="updateState === 'checking'" @click="checkUpdate(true)">
-                {{ updateTitle() }}
-              </button>
-            </div>
-          </div>
-        </section>
+      <main ref="contentRef" class="content">
+        <ErrorBoundary>
+          <RouterView />
+        </ErrorBoundary>
       </main>
     </div>
+
+    <!-- 全局 Toast 出口（业务侧调用 lib/toast.ts 即可） -->
+    <ToastHost />
   </div>
 </template>

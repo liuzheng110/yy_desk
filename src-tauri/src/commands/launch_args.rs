@@ -31,21 +31,36 @@ mod tests {
 
     #[test]
     fn passes_plain_paths_through_unchanged() {
-        assert_eq!(normalize_launch_path_arg("/tmp/query.sql").as_deref(), Some("/tmp/query.sql"));
+        assert_eq!(
+            normalize_launch_path_arg("/tmp/query.sql").as_deref(),
+            Some("/tmp/query.sql")
+        );
         assert_eq!(normalize_launch_path_arg("query.sql").as_deref(), Some("query.sql"));
         assert_eq!(normalize_launch_path_arg("dbx://open").as_deref(), Some("dbx://open"));
     }
 
     #[test]
     fn decodes_local_file_urls() {
-        assert_eq!(normalize_launch_path_arg("file:///tmp/query.sql").as_deref(), Some("/tmp/query.sql"));
-        assert_eq!(normalize_launch_path_arg("file://localhost/tmp/query.sql").as_deref(), Some("/tmp/query.sql"));
+        assert_eq!(
+            normalize_launch_path_arg("file:///tmp/query.sql").as_deref(),
+            Some("/tmp/query.sql")
+        );
+        assert_eq!(
+            normalize_launch_path_arg("file://localhost/tmp/query.sql").as_deref(),
+            Some("/tmp/query.sql")
+        );
     }
 
     #[test]
     fn percent_decodes_file_urls() {
-        assert_eq!(normalize_launch_path_arg("file:///tmp/my%20query.sql").as_deref(), Some("/tmp/my query.sql"));
-        assert_eq!(normalize_launch_path_arg("file:///tmp/%E6%9F%A5%E8%AF%A2.sql").as_deref(), Some("/tmp/查询.sql"));
+        assert_eq!(
+            normalize_launch_path_arg("file:///tmp/my%20query.sql").as_deref(),
+            Some("/tmp/my query.sql")
+        );
+        assert_eq!(
+            normalize_launch_path_arg("file:///tmp/%E6%9F%A5%E8%AF%A2.sql").as_deref(),
+            Some("/tmp/查询.sql")
+        );
     }
 
     /// The desktop entry is a shipped artifact whose `Exec=` field code is what puts
@@ -55,8 +70,10 @@ mod tests {
     fn linux_desktop_entry_forwards_urls_and_files() {
         let template = include_str!("../../linux/MyApp.desktop");
 
-        let exec =
-            template.lines().find_map(|line| line.strip_prefix("Exec=")).expect("desktop entry must declare Exec=");
+        let exec = template
+            .lines()
+            .find_map(|line| line.strip_prefix("Exec="))
+            .expect("desktop entry must declare Exec=");
         assert!(
             exec.ends_with(" %U") || exec.ends_with(" %u"),
             "Exec= needs a URL field code or launch arguments are dropped, got {exec:?}"

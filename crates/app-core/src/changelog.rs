@@ -85,7 +85,9 @@ fn is_app_release_tag(tag: &str) -> bool {
     suffix.is_empty()
         || ((suffix.starts_with('.') || suffix.starts_with('-'))
             && suffix.len() > 1
-            && suffix[1..].bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'.' || byte == b'-'))
+            && suffix[1..]
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'.' || byte == b'-'))
 }
 
 pub async fn fetch_changelog() -> Result<ChangelogData, String> {
@@ -110,7 +112,10 @@ pub async fn fetch_changelog() -> Result<ChangelogData, String> {
         .map(|release| ChangelogRelease {
             tag: release.tag_name,
             name: release.name.unwrap_or_default(),
-            date: release.published_at.map(|value| value.chars().take(10).collect()).unwrap_or_default(),
+            date: release
+                .published_at
+                .map(|value| value.chars().take(10).collect())
+                .unwrap_or_default(),
             sections: release
                 .body
                 .filter(|body| !body.trim().is_empty())
@@ -118,26 +123,35 @@ pub async fn fetch_changelog() -> Result<ChangelogData, String> {
                     vec![ChangelogSection {
                         r#type: "markdown".to_string(),
                         title: String::new(),
-                        items: vec![ChangelogItem { title: String::new(), desc: body }],
+                        items: vec![ChangelogItem {
+                            title: String::new(),
+                            desc: body,
+                        }],
                     }]
                 })
                 .unwrap_or_default(),
         })
         .collect();
 
-    Ok(ChangelogData { updated_at: String::new(), releases })
+    Ok(ChangelogData {
+        updated_at: String::new(),
+        releases,
+    })
 }
 
 fn build_changelog_http_client() -> Result<reqwest::Client, String> {
-    let mut builder =
-        reqwest::Client::builder().timeout(std::time::Duration::from_secs(15)).user_agent("myapp-changelog");
+    let mut builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent("myapp-changelog");
 
     if let Some(proxy_url) = crate::update::system_proxy_url() {
         let proxy = reqwest::Proxy::all(&proxy_url).map_err(|e| format!("Invalid system proxy URL: {e}"))?;
         builder = builder.proxy(proxy);
     }
 
-    builder.build().map_err(|e| format!("Failed to create HTTP client: {e}"))
+    builder
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {e}"))
 }
 
 #[cfg(test)]

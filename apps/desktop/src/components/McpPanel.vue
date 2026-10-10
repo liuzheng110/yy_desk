@@ -34,6 +34,8 @@ interface RefreshReport {
   error: string | null;
 }
 
+const emit = defineEmits<{ (e: "configure"): void }>();
+
 const status = ref<McpStatus | null>(null);
 const error = ref("");
 const busy = ref(false);
@@ -137,6 +139,7 @@ onMounted(load);
         </p>
       </div>
       <div class="mcp-actions">
+        <button class="tb-btn" @click="emit('configure')">配置服务器</button>
         <button class="tb-btn" :disabled="busy" @click="reloadConfig">重载配置</button>
         <button class="tb-btn primary" :disabled="busy" @click="refreshTools">
           {{ busy ? "处理中…" : "刷新工具列表" }}
@@ -149,10 +152,20 @@ onMounted(load);
     <template v-if="status">
       <div class="mcp-statusline">
         <span class="badge ok">网关在线</span>
-        <span class="muted">端口 <code>{{ status.port }}</code></span>
-        <span class="muted">缓存刷新 <code>{{ fmtTs(status.refreshedAt) }}</code></span>
-        <span class="muted">服务器 <code>{{ status.servers.length }}</code> 个 · 工具缓存 <code>{{ status.servers.reduce((n, s) => n + s.cachedTools, 0) }}</code> 个</span>
-        <span class="muted" title="meta 模式：只暴露 gateway_search/gateway_invoke 等少量元工具，防止大量工具撑爆上下文">
+        <span class="muted"
+          >端口 <code>{{ status.port }}</code></span
+        >
+        <span class="muted"
+          >缓存刷新 <code>{{ fmtTs(status.refreshedAt) }}</code></span
+        >
+        <span class="muted"
+          >服务器 <code>{{ status.servers.length }}</code> 个 · 工具缓存
+          <code>{{ status.servers.reduce((n, s) => n + s.cachedTools, 0) }}</code> 个</span
+        >
+        <span
+          class="muted"
+          title="meta 模式：只暴露 gateway_search/gateway_invoke 等少量元工具，防止大量工具撑爆上下文"
+        >
           模式 <code>{{ status.metaMode ? "meta（按需搜索调用）" : "全量暴露" }}</code>
         </span>
         <span v-if="status.autoWarmStart" class="muted" title="启动时自动连接外部 MCP 预取工具缓存，失败自动重试">
@@ -163,9 +176,8 @@ onMounted(load);
       <div v-if="status.servers.length === 0" class="mcp-empty">
         <p>尚未配置任何外部 MCP 服务器。</p>
         <p class="muted">
-          编辑数据目录下 <code>data\mcp-servers.json</code>（<code>{"port":9876,"servers":[{...}]}</code>），
-          然后点「重载配置」；自动预取会在启动时扫描工具（也可手动点「刷新工具列表」）。
-          字段说明见 <code>mcp-servers.example.json</code> 与《MCP代理-Codex接入指南.md》。
+          点上方「配置服务器」在界面里新增（支持 stdio / http、环境变量、按需自动启动等），
+          保存后网关立即加载；自动预取会在启动时扫描工具（也可手动点「刷新工具列表」）。
         </p>
       </div>
 
@@ -186,10 +198,14 @@ onMounted(load);
             <tr v-for="s in status.servers" :key="s.name">
               <td>
                 <code>{{ s.name }}</code>
-                <span v-if="s.autoStart" class="badge ok" title="调用或手动刷新时，应用未运行则自动启动并等待就绪">按需启动</span>
+                <span v-if="s.autoStart" class="badge ok" title="调用或手动刷新时，应用未运行则自动启动并等待就绪"
+                  >按需启动</span
+                >
               </td>
               <td>{{ s.transport }}</td>
-              <td><code>{{ s.toolPrefix }}</code></td>
+              <td>
+                <code>{{ s.toolPrefix }}</code>
+              </td>
               <td class="mcp-target">
                 <code v-if="s.command">{{ s.command }}</code>
                 <code v-else-if="s.url">{{ s.url }}</code>
@@ -210,19 +226,23 @@ onMounted(load);
                   class="tb-btn small-btn"
                   :disabled="busy"
                   @click="killServer(s.name)"
-                >停用</button>
-                <button
-                  v-else
-                  class="tb-btn primary small-btn"
-                  :disabled="busy"
-                  @click="reviveServer(s.name)"
-                >恢复</button>
+                >
+                  停用
+                </button>
+                <button v-else class="tb-btn primary small-btn" :disabled="busy" @click="reviveServer(s.name)">
+                  恢复
+                </button>
               </td>
             </tr>
           </tbody>
         </table>
-        <p v-if="status.servers.some((s) => s.status === 'failed' || s.status === 'circuitOpen')" class="muted" style="font-size: 12px">
-          提示：故障/熔断的后端会保留工具缓存（Codex 仍可发现），外部 MCP 恢复后调用自动成功；熔断会在重置时间后自动恢复，也可点「恢复」立即启用。
+        <p
+          v-if="status.servers.some((s) => s.status === 'failed' || s.status === 'circuitOpen')"
+          class="muted"
+          style="font-size: 12px"
+        >
+          提示：故障/熔断的后端会保留工具缓存（Codex 仍可发现），外部 MCP
+          恢复后调用自动成功；熔断会在重置时间后自动恢复，也可点「恢复」立即启用。
         </p>
       </div>
 
@@ -240,9 +260,13 @@ onMounted(load);
 
       <div class="mcp-hint">
         <h4>Codex 接入方式（写入 <code>~/.codex/config.toml</code>）</h4>
-        <pre>[mcp_servers.myapp]
+        <pre>
+[mcp_servers.myapp]
 url = "http://127.0.0.1:{{ status.port }}/mcp"</pre>
-        <p class="muted">或用 stdio 入口：<code>command = "…MyApp.exe"</code>、<code>args = ["--mcp-proxy"]</code>（代理会自动拉起本程序）</p>
+        <p class="muted">
+          或用 stdio 入口：<code>command = "…MyApp.exe"</code>、<code>args = ["--mcp-proxy"]</code
+          >（代理会自动拉起本程序）
+        </p>
         <p v-if="status.metaMode" class="muted" style="margin-top: 4px">
           meta 模式下客户端先调用 <code>gateway_search_tools(query)</code> 搜索工具，再用
           <code>gateway_invoke(server, tool, arguments)</code> 调用；详见《MCP代理-Codex接入指南.md》。
@@ -271,9 +295,9 @@ url = "http://127.0.0.1:{{ status.port }}/mcp"</pre>
   gap: 8px;
 }
 .mcp-error {
-  color: #b91c1c;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  color: var(--err-text);
+  background: var(--err-bg);
+  border: 1px solid var(--err-border);
   border-radius: 8px;
   padding: 8px 12px;
   font-size: 13px;
@@ -295,24 +319,24 @@ url = "http://127.0.0.1:{{ status.port }}/mcp"</pre>
   font-weight: 600;
 }
 .badge.ok {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--ok-soft-bg);
+  color: var(--ok-soft-text);
 }
 .badge.off {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--bg-hover);
+  color: var(--text-muted);
 }
 .badge.err {
-  background: #fef2f2;
-  color: #b91c1c;
+  background: var(--err-bg);
+  color: var(--err-text);
 }
 .badge.warn {
-  background: #fef9c3;
-  color: #854d0e;
+  background: var(--warn-bg);
+  color: var(--warn-text);
 }
 .mcp-empty {
-  background: #f9fafb;
-  border: 1px dashed #d1d5db;
+  background: var(--bg-sunken);
+  border: 1px dashed var(--border-strong);
   border-radius: 10px;
   padding: 14px 16px;
   font-size: 13px;
@@ -331,11 +355,11 @@ url = "http://127.0.0.1:{{ status.port }}/mcp"</pre>
 .mcp-servers td {
   text-align: left;
   padding: 7px 10px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border);
   vertical-align: middle;
 }
 .mcp-servers th {
-  color: #6b7280;
+  color: var(--text-muted);
   font-weight: 600;
   font-size: 12px;
 }
@@ -350,7 +374,7 @@ url = "http://127.0.0.1:{{ status.port }}/mcp"</pre>
   font-size: 12px;
 }
 .mcp-report {
-  background: #f9fafb;
+  background: var(--bg-sunken);
   border-radius: 10px;
   padding: 10px 14px;
   font-size: 13px;
@@ -370,11 +394,11 @@ url = "http://127.0.0.1:{{ status.port }}/mcp"</pre>
 }
 .mcp-hint {
   margin-top: 12px;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--border);
   padding-top: 10px;
 }
 .mcp-hint pre {
-  background: #f3f4f6;
+  background: var(--bg-hover);
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 12px;

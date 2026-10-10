@@ -27,9 +27,7 @@ export function isFrontendReady(): boolean {
  * 订阅关闭请求事件。resolve 回调返回用户选择的动作：
  * "quit" 退出进程；"hide" 隐藏到托盘。
  */
-export function onAppCloseRequested(
-  resolve: (action: "quit" | "hide") => void,
-): Promise<() => void> {
+export function onAppCloseRequested(resolve: (action: "quit" | "hide") => void): Promise<() => void> {
   return listen<string>(APP_CLOSE_REQUESTED_EVENT, (event) => {
     const target = event.payload ?? "settings";
     if (target === "quit" && !isFrontendReady()) {

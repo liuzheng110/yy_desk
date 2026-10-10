@@ -20,12 +20,11 @@ use anyhow::{bail, Context};
 use serde_json::{json, Value};
 use tokio::sync::Mutex;
 
-use crate::client_http::HttpMcpClient;
 use crate::app_launcher::AppLauncher;
+use crate::client_http::HttpMcpClient;
 use crate::client_stdio::StdioMcpClient;
 use crate::config::{
-    load_cache, load_config, save_cache, FailsafeConfig, McpRegistryConfig, McpServerConfig,
-    McpToolsCache,
+    load_cache, load_config, save_cache, FailsafeConfig, McpRegistryConfig, McpServerConfig, McpToolsCache,
 };
 use crate::protocol::ToolDefinition;
 
@@ -105,15 +104,15 @@ impl GatewayHandle {
     pub fn load(config_path: &Path, cache_path: &Path) -> anyhow::Result<Self> {
         let config = load_config(config_path)?;
         let cache = load_cache(cache_path)?;
-        Ok(Self::new(config, cache, config_path.to_path_buf(), cache_path.to_path_buf()))
+        Ok(Self::new(
+            config,
+            cache,
+            config_path.to_path_buf(),
+            cache_path.to_path_buf(),
+        ))
     }
 
-    fn new(
-        config: McpRegistryConfig,
-        cache: McpToolsCache,
-        config_path: PathBuf,
-        cache_path: PathBuf,
-    ) -> Self {
+    fn new(config: McpRegistryConfig, cache: McpToolsCache, config_path: PathBuf, cache_path: PathBuf) -> Self {
         let mut runtimes = BTreeMap::new();
         for s in config.enabled_servers() {
             runtimes.insert(
@@ -314,10 +313,7 @@ impl GatewayHandle {
             if let Some(rt) = inner.runtimes.get(&server.name) {
                 match rt.status {
                     BackendStatus::Killed => {
-                        bail!(
-                            "backend `{}` is disabled by kill switch; revive it first",
-                            server.name
-                        )
+                        bail!("backend `{}` is disabled by kill switch; revive it first", server.name)
                     }
                     BackendStatus::CircuitOpen => {
                         if let Some(until) = rt.circuit_open_until {
@@ -325,7 +321,8 @@ impl GatewayHandle {
                                 let remain = until.saturating_duration_since(Instant::now()).as_secs();
                                 bail!(
                                     "backend `{}` circuit is open ({}s left); call later or revive manually",
-                                    server.name, remain
+                                    server.name,
+                                    remain
                                 );
                             }
                         }
@@ -439,11 +436,7 @@ impl GatewayHandle {
     /// Usage-boosted: frequently used tools score higher, but relevance wins.
     pub async fn search_tools(&self, query: &str, limit: Option<usize>) -> Vec<Value> {
         let inner = self.inner.lock().await;
-        let terms: Vec<String> = query
-            .to_lowercase()
-            .split_whitespace()
-            .map(|s| s.to_string())
-            .collect();
+        let terms: Vec<String> = query.to_lowercase().split_whitespace().map(|s| s.to_string()).collect();
         let mut scored: Vec<(f64, String, ToolDefinition, String)> = Vec::new();
         for server in inner.config.enabled_servers() {
             let prefix = server.tool_prefix.clone().unwrap_or_else(|| server.name.clone());
@@ -453,8 +446,7 @@ impl GatewayHandle {
                     let score = score_text(&terms, &t.name, t.description.as_deref().unwrap_or(""));
                     if score > 0 {
                         let uses = inner.usages.get(&qname).copied().unwrap_or(0);
-                        let final_score =
-                            score as f64 * (1.0 + (uses as f64 + 1.0).log2() * 0.15);
+                        let final_score = score as f64 * (1.0 + (uses as f64 + 1.0).log2() * 0.15);
                         scored.push((final_score, qname, t.clone(), server.name.clone()));
                     }
                 }
@@ -540,11 +532,18 @@ impl GatewayHandle {
 
         let mut updated = Vec::new();
         for server in servers {
-            let killed = self.inner.lock().await.runtimes.get(&server.name)
+            let killed = self
+                .inner
+                .lock()
+                .await
+                .runtimes
+                .get(&server.name)
                 .is_some_and(|r| r.status == BackendStatus::Killed);
             if killed {
                 reports.push(RefreshReport {
-                    server: server.name.clone(), ok: false, tool_count: 0,
+                    server: server.name.clone(),
+                    ok: false,
+                    tool_count: 0,
                     error: Some("后端已停用，请先恢复后再刷新".into()),
                 });
                 continue;
@@ -552,7 +551,8 @@ impl GatewayHandle {
             let outcome = async {
                 self.app_launcher.ensure_ready(server.auto_start.as_ref()).await?;
                 scan_server(&server).await
-            }.await;
+            }
+            .await;
             match outcome {
                 Ok(tools) => {
                     updated.push((server.name.clone(), tools.clone()));
@@ -774,11 +774,7 @@ fn resolve_server<'a>(
                 let better = match best {
                     None => true,
                     Some((prev, _)) => {
-                        prefix.len()
-                            > prev.tool_prefix
-                                .clone()
-                                .unwrap_or_else(|| prev.name.clone())
-                                .len()
+                        prefix.len() > prev.tool_prefix.clone().unwrap_or_else(|| prev.name.clone()).len()
                     }
                 };
                 if better {
@@ -828,9 +824,15 @@ mod tests {
     #[test]
     fn score_text_tiers() {
         // all words in name -> 15
-        assert_eq!(score_text(&["read".into(), "file".into()], "read_file", "reads a file"), 15);
+        assert_eq!(
+            score_text(&["read".into(), "file".into()], "read_file", "reads a file"),
+            15
+        );
         // all words in name+description -> 10
-        assert_eq!(score_text(&["read".into(), "file".into()], "open_doc", "read a file from disk"), 10);
+        assert_eq!(
+            score_text(&["read".into(), "file".into()], "open_doc", "read a file from disk"),
+            10
+        );
         // single word in description -> 10
         assert_eq!(score_text(&["web".into()], "search", "web search tool"), 10);
         // all words in name -> 15

@@ -1,6 +1,6 @@
 [package]
 name = "myapp"
-version = "0.1.3"
+version = "0.1.4"
 description = "MyApp desktop framework (Tauri 2 shell)"
 authors = ["you"]
 license = "Apache-2.0"

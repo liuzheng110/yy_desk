@@ -158,7 +158,10 @@ pub fn prompt_gateway_test_lock() -> &'static tokio::sync::Mutex<()> {
 pub fn request_ssh_prompt(request: SshPromptRequest) -> Option<oneshot::Receiver<SshPromptAnswer>> {
     let tx = PROMPT_GATEWAY.lock().unwrap().clone()?;
     let (responder_tx, responder_rx) = oneshot::channel();
-    match tx.try_send(SshPromptEnvelope { request, responder: responder_tx }) {
+    match tx.try_send(SshPromptEnvelope {
+        request,
+        responder: responder_tx,
+    }) {
         // Channel full or disconnected: treat as unavailable -> fail closed.
         Ok(()) => Some(responder_rx),
         Err(_) => None,
@@ -248,7 +251,14 @@ pub struct UserInputRequest {
 
 impl UserInputRequest {
     pub fn new(prompt: impl Into<String>) -> Self {
-        Self { prompt: prompt.into(), echo: false, title: None, source: None, default_value: None, options: Vec::new() }
+        Self {
+            prompt: prompt.into(),
+            echo: false,
+            title: None,
+            source: None,
+            default_value: None,
+            options: Vec::new(),
+        }
     }
 
     pub fn with_title(mut self, title: Option<String>) -> Self {
@@ -349,7 +359,12 @@ pub fn notify_host_key(kind: SshHostKeyNoticeKind, host: &str, port: u16, messag
         Some(tx) => tx,
         None => return false,
     };
-    match tx.try_send(SshHostKeyNotice { kind, host: host.to_string(), port, message: message.to_string() }) {
+    match tx.try_send(SshHostKeyNotice {
+        kind,
+        host: host.to_string(),
+        port,
+        message: message.to_string(),
+    }) {
         Ok(()) => true,
         // Channel full or disconnected: treat as unavailable -> silently drop.
         Err(_) => false,

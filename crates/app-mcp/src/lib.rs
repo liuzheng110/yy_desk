@@ -10,8 +10,8 @@
 //! - `tools/call` forwards **live** to the owning server; a server started after
 //!   Codex becomes usable without restarting the session.
 
-pub mod client_http;
 pub mod app_launcher;
+pub mod client_http;
 pub mod client_stdio;
 pub mod config;
 pub mod gateway;
@@ -19,6 +19,6 @@ pub mod protocol;
 pub mod proxy_stdio;
 pub mod server_http;
 
-pub use config::{load_config, DEFAULT_MCP_PORT, McpRegistryConfig, McpServerConfig, McpToolsCache};
+pub use config::{load_config, McpRegistryConfig, McpServerConfig, McpToolsCache, DEFAULT_MCP_PORT};
 pub use gateway::{GatewayHandle, RefreshReport};
 pub use protocol::{ToolDefinition, PROTOCOL_VERSION};

@@ -21,8 +21,9 @@ fn expand_tilde_with(
     }
 
     let named_path = &path[1..];
-    let (username, suffix) =
-        named_path.find('/').map_or((named_path, ""), |index| (&named_path[..index], &named_path[index..]));
+    let (username, suffix) = named_path
+        .find('/')
+        .map_or((named_path, ""), |index| (&named_path[..index], &named_path[index..]));
 
     named_home(username).map_or_else(|| path.to_string(), |home| home + suffix)
 }
@@ -33,7 +34,10 @@ fn home_dir() -> Option<String> {
 
 #[cfg(all(unix, not(target_os = "redox")))]
 fn named_user_home(username: &str) -> Option<String> {
-    nix::unistd::User::from_name(username).ok().flatten().and_then(|user| user.dir.into_os_string().into_string().ok())
+    nix::unistd::User::from_name(username)
+        .ok()
+        .flatten()
+        .and_then(|user| user.dir.into_os_string().into_string().ok())
 }
 
 #[cfg(any(not(unix), target_os = "redox"))]
@@ -71,7 +75,10 @@ mod tests {
 
     #[test]
     fn expands_current_user_home_forms() {
-        assert_eq!(expand_tilde_with("~", || Some("/home/current".into()), no_named_user), "/home/current");
+        assert_eq!(
+            expand_tilde_with("~", || Some("/home/current".into()), no_named_user),
+            "/home/current"
+        );
         assert_eq!(
             expand_tilde_with(
                 "~/.ssh/config",
@@ -85,7 +92,10 @@ mod tests {
     #[test]
     fn preserves_current_user_forms_when_home_is_unavailable() {
         assert_eq!(expand_tilde_with("~", || None, no_named_user), "~");
-        assert_eq!(expand_tilde_with("~/.ssh/config", || None, no_named_user), "~/.ssh/config");
+        assert_eq!(
+            expand_tilde_with("~/.ssh/config", || None, no_named_user),
+            "~/.ssh/config"
+        );
     }
 
     #[test]
@@ -93,14 +103,26 @@ mod tests {
         let named_home = |username: &str| (username == "alice").then(|| "/Users/alice".to_string());
 
         assert_eq!(expand_tilde_with("~alice", || None, named_home), "/Users/alice");
-        assert_eq!(expand_tilde_with("~alice/.ssh/agent.sock", || None, named_home), "/Users/alice/.ssh/agent.sock");
+        assert_eq!(
+            expand_tilde_with("~alice/.ssh/agent.sock", || None, named_home),
+            "/Users/alice/.ssh/agent.sock"
+        );
         assert_eq!(expand_tilde_with("~alice/", || None, named_home), "/Users/alice/");
     }
 
     #[test]
     fn preserves_unresolved_or_non_posix_named_user_forms() {
-        assert_eq!(expand_tilde_with("~missing/.ssh/agent.sock", || None, no_named_user), "~missing/.ssh/agent.sock");
-        assert_eq!(expand_tilde_with("~alice\\.ssh\\agent.sock", || None, no_named_user), "~alice\\.ssh\\agent.sock");
-        assert_eq!(expand_tilde_with("~~/.ssh/agent.sock", || None, no_named_user), "~~/.ssh/agent.sock");
+        assert_eq!(
+            expand_tilde_with("~missing/.ssh/agent.sock", || None, no_named_user),
+            "~missing/.ssh/agent.sock"
+        );
+        assert_eq!(
+            expand_tilde_with("~alice\\.ssh\\agent.sock", || None, no_named_user),
+            "~alice\\.ssh\\agent.sock"
+        );
+        assert_eq!(
+            expand_tilde_with("~~/.ssh/agent.sock", || None, no_named_user),
+            "~~/.ssh/agent.sock"
+        );
     }
 }

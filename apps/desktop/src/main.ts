@@ -1,7 +1,11 @@
 import { createApp } from "vue";
+import { createPinia } from "pinia";
 import "./styles.css";
-import { backend } from "./lib/backend";
+import { toErrorMessage } from "./lib/errors";
 import { markFrontendReady } from "./lib/startup";
+import { toastError } from "./lib/toast";
+import router from "./router";
+import { useSettingsStore } from "./stores/settings";
 import StartupGate from "./StartupGate.vue";
 
 function renderStartupError(error: unknown) {
@@ -37,12 +41,21 @@ async function bootstrap() {
 
   // 桌面壳：等待后端存储就绪；Web 模式（pnpm dev:web）降级直接进入。
   if (typeof window.__TAURI_INTERNALS__ !== "undefined") {
-    await backend.markFrontendReady().catch((error) => {
+    await markFrontendReady().catch((error) => {
       console.warn("[STARTUP] mark_frontend_ready failed (safe to ignore in dev)", error);
     });
   }
 
   const app = createApp(StartupGate);
+  app.use(createPinia());
+  app.use(router);
+  // 全局兜底：组件外抛出的错误统一打日志并弹 Toast，避免静默失败。
+  app.config.errorHandler = (error, _instance, info) => {
+    console.error("[UI] global error", error, info);
+    toastError(toErrorMessage(error));
+  };
+  // 尽早应用主题，避免首帧闪白
+  useSettingsStore().initTheme();
   app.mount("#root");
 
   const loading = document.querySelector<HTMLDivElement>("#startup-loading");

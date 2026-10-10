@@ -90,8 +90,9 @@ pub(super) fn verify_portable_archive(
 }
 
 fn decode_tauri_text(value: &str, label: &str) -> Result<String, String> {
-    let decoded =
-        BASE64_STANDARD.decode(value).map_err(|error| format!("Invalid updater {label} encoding: {error}"))?;
+    let decoded = BASE64_STANDARD
+        .decode(value)
+        .map_err(|error| format!("Invalid updater {label} encoding: {error}"))?;
     String::from_utf8(decoded).map_err(|error| format!("Updater {label} is not valid UTF-8: {error}"))
 }
 
@@ -123,7 +124,10 @@ fn validated_portable_executable(
     };
 
     if manifest.schema_version != PORTABLE_UPDATE_MANIFEST_SCHEMA_VERSION {
-        return Err(format!("Unsupported portable update manifest schema version {}.", manifest.schema_version));
+        return Err(format!(
+            "Unsupported portable update manifest schema version {}.",
+            manifest.schema_version
+        ));
     }
     let manifest_version = parse_portable_version(&manifest.version, "manifest")?;
     if &manifest_version != expected_version {
@@ -139,7 +143,9 @@ fn validated_portable_executable(
         ));
     }
     if manifest.executable != PORTABLE_EXECUTABLE_NAME {
-        return Err(format!("Portable update manifest executable must be {PORTABLE_EXECUTABLE_NAME}."));
+        return Err(format!(
+            "Portable update manifest executable must be {PORTABLE_EXECUTABLE_NAME}."
+        ));
     }
 
     let mut file = archive
@@ -183,8 +189,11 @@ fn portable_update_staging_dir(executable_dir: &std::path::Path, update_id: &str
 #[cfg(target_os = "windows")]
 fn resolve_powershell_program() -> Option<std::path::PathBuf> {
     let root = std::env::var_os("SystemRoot").filter(|value| !value.is_empty())?;
-    let candidate =
-        std::path::Path::new(&root).join("System32").join("WindowsPowerShell").join("v1.0").join("powershell.exe");
+    let candidate = std::path::Path::new(&root)
+        .join("System32")
+        .join("WindowsPowerShell")
+        .join("v1.0")
+        .join("powershell.exe");
     candidate.is_file().then_some(candidate)
 }
 
@@ -201,7 +210,9 @@ pub(super) fn launch_portable_update_helper(archive: &[u8], version: &Version) -
 
     let current_exe =
         std::env::current_exe().map_err(|error| format!("Failed to locate the portable executable: {error}"))?;
-    let exe_dir = current_exe.parent().ok_or_else(|| "Portable executable directory is unavailable.".to_string())?;
+    let exe_dir = current_exe
+        .parent()
+        .ok_or_else(|| "Portable executable directory is unavailable.".to_string())?;
     if !exe_dir.join("portable.myapp").is_file() {
         return Err("Portable update marker is missing beside MyApp.exe.".to_string());
     }
@@ -245,7 +256,9 @@ pub(super) fn launch_portable_update_helper(archive: &[u8], version: &Version) -
             .map_err(|error| format!("Failed to create portable update helper: {error}"))?;
 
         let resolved_powershell = resolve_powershell_program();
-        let program = resolved_powershell.clone().unwrap_or_else(|| std::path::PathBuf::from("powershell.exe"));
+        let program = resolved_powershell
+            .clone()
+            .unwrap_or_else(|| std::path::PathBuf::from("powershell.exe"));
         Command::new(&program)
             .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"])
             .arg(&script_path)
@@ -373,8 +386,14 @@ mod tests {
 
     #[test]
     fn builds_portable_asset_names_for_windows_architectures() {
-        assert_eq!(portable_asset_name("0.5.64", "x86_64").unwrap(), "MyApp_0.5.64_x64-portable.zip");
-        assert_eq!(portable_asset_name("v0.5.64-beta.1", "aarch64").unwrap(), "MyApp_0.5.64-beta.1_arm64-portable.zip");
+        assert_eq!(
+            portable_asset_name("0.5.64", "x86_64").unwrap(),
+            "MyApp_0.5.64_x64-portable.zip"
+        );
+        assert_eq!(
+            portable_asset_name("v0.5.64-beta.1", "aarch64").unwrap(),
+            "MyApp_0.5.64-beta.1_arm64-portable.zip"
+        );
         assert!(portable_asset_name("0.5.64", "x86").is_err());
         assert!(portable_asset_name("../../0.5.64", "x86_64").is_err());
     }
@@ -385,9 +404,15 @@ mod tests {
         let staging_dir = portable_update_staging_dir(executable_dir, "123-456");
 
         assert_eq!(staging_dir.parent(), Some(executable_dir));
-        assert_eq!(staging_dir.file_name().and_then(|name| name.to_str()), Some(".myapp-portable-update-123-456"));
+        assert_eq!(
+            staging_dir.file_name().and_then(|name| name.to_str()),
+            Some(".myapp-portable-update-123-456")
+        );
         assert_eq!(staging_dir.join("MyApp.exe.new").parent(), Some(staging_dir.as_path()));
-        assert_eq!(staging_dir.join("apply-update.ps1").parent(), Some(staging_dir.as_path()));
+        assert_eq!(
+            staging_dir.join("apply-update.ps1").parent(),
+            Some(staging_dir.as_path())
+        );
     }
 
     #[test]
@@ -413,7 +438,10 @@ mod tests {
 
     #[test]
     fn accepts_newer_portable_update_requests() {
-        assert_eq!(validate_requested_portable_version("0.5.64", "0.5.63").unwrap(), Version::parse("0.5.64").unwrap());
+        assert_eq!(
+            validate_requested_portable_version("0.5.64", "0.5.63").unwrap(),
+            Version::parse("0.5.64").unwrap()
+        );
     }
 
     #[test]
@@ -431,7 +459,10 @@ mod tests {
     #[test]
     fn decodes_tauri_base64_text() {
         let encoded = BASE64_STANDARD.encode("untrusted comment: test\nAAAA");
-        assert_eq!(decode_tauri_text(&encoded, "test").unwrap(), "untrusted comment: test\nAAAA");
+        assert_eq!(
+            decode_tauri_text(&encoded, "test").unwrap(),
+            "untrusted comment: test\nAAAA"
+        );
     }
 
     #[test]

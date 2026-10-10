@@ -9,7 +9,10 @@ pub struct MigrationGate {
 }
 impl MigrationGate {
     pub fn new(ready: bool) -> Self {
-        Self { ready: AtomicBool::new(ready), changed: tokio::sync::Notify::new() }
+        Self {
+            ready: AtomicBool::new(ready),
+            changed: tokio::sync::Notify::new(),
+        }
     }
     pub fn is_ready(&self) -> bool {
         self.ready.load(Ordering::Acquire)
@@ -57,7 +60,11 @@ pub fn guard_handler<R: tauri::Runtime>(
     move |invoke| {
         // state_ref 在 tauri 2.10 标记为 deprecated；try_get 语义（不 panic）仍需要它。
         #[allow(deprecated)]
-        let ready = invoke.message.state_ref().try_get::<Arc<MigrationGate>>().is_some_and(|gate| gate.is_ready());
+        let ready = invoke
+            .message
+            .state_ref()
+            .try_get::<Arc<MigrationGate>>()
+            .is_some_and(|gate| gate.is_ready());
         if !ready && !allowed_command(invoke.message.command()) {
             invoke.resolver.reject("DATA_MIGRATION_REQUIRED");
             return true;
@@ -70,7 +77,13 @@ mod tests {
     use super::*;
     #[test]
     fn gate_denies_business_commands() {
-        for command in ["load_connections", "webdav_sync_upload", "load_ai_config", "plugin_invoke", "migration_fake"] {
+        for command in [
+            "load_connections",
+            "webdav_sync_upload",
+            "load_ai_config",
+            "plugin_invoke",
+            "migration_fake",
+        ] {
             assert!(!allowed_command(command));
         }
         assert!(allowed_command("migration_start"));
@@ -91,12 +104,20 @@ mod tests {
             }))
             .build(mock_context(noop_assets()))
             .unwrap();
-        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default()).build().unwrap();
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .unwrap();
         let request = |command: &str| tauri::webview::InvokeRequest {
             cmd: command.into(),
             callback: tauri::ipc::CallbackFn(0),
             error: tauri::ipc::CallbackFn(1),
-            url: if cfg!(windows) { "http://tauri.localhost" } else { "tauri://localhost" }.parse().unwrap(),
+            url: if cfg!(windows) {
+                "http://tauri.localhost"
+            } else {
+                "tauri://localhost"
+            }
+            .parse()
+            .unwrap(),
             body: tauri::ipc::InvokeBody::default(),
             headers: Default::default(),
             invoke_key: tauri::test::INVOKE_KEY.into(),

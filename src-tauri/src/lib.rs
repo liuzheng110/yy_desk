@@ -48,7 +48,10 @@ pub struct CloseBehaviorState {
 
 impl CloseBehaviorState {
     fn new() -> Self {
-        Self { confirmed_exit: AtomicBool::new(false), frontend_ready: AtomicBool::new(false) }
+        Self {
+            confirmed_exit: AtomicBool::new(false),
+            frontend_ready: AtomicBool::new(false),
+        }
     }
 
     pub(crate) fn allow_next_exit(&self) {
@@ -75,7 +78,9 @@ pub struct AppLocaleState {
 
 impl AppLocaleState {
     fn new() -> Self {
-        Self { locale: std::sync::Mutex::new(None) }
+        Self {
+            locale: std::sync::Mutex::new(None),
+        }
     }
 
     pub(crate) fn set(&self, locale: String) {
@@ -92,7 +97,11 @@ impl AppLocaleState {
 }
 
 pub(crate) fn apply_debug_log_level(debug_logging_enabled: bool) {
-    log::set_max_level(if debug_logging_enabled { log::LevelFilter::Debug } else { log::LevelFilter::Off });
+    log::set_max_level(if debug_logging_enabled {
+        log::LevelFilter::Debug
+    } else {
+        log::LevelFilter::Off
+    });
 }
 
 fn should_hide_window_on_close(target_os: &str) -> bool {
@@ -128,7 +137,9 @@ fn startup_data_dir_mode(mode: &data_dir::DataDirMode) -> &'static str {
 fn linux_appindicator_available() -> bool {
     const APPINDICATOR_LIBRARIES: &[&str] = &["libayatana-appindicator3.so.1", "libappindicator3.so.1"];
 
-    APPINDICATOR_LIBRARIES.iter().any(|library| unsafe { libloading::Library::new(library).is_ok() })
+    APPINDICATOR_LIBRARIES
+        .iter()
+        .any(|library| unsafe { libloading::Library::new(library).is_ok() })
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -212,7 +223,9 @@ pub(crate) fn hide_main_window_for_close<R: tauri::Runtime>(app: &tauri::AppHand
 }
 
 pub(crate) fn request_app_close<R: tauri::Runtime>(app: &tauri::AppHandle<R>, target: &str) {
-    let frontend_ready = app.try_state::<CloseBehaviorState>().is_some_and(|state| state.is_frontend_ready());
+    let frontend_ready = app
+        .try_state::<CloseBehaviorState>()
+        .is_some_and(|state| state.is_frontend_ready());
     if should_fallback_to_native_quit(target, frontend_ready) {
         // WebView2 运行时缺失等场景会导致前端监听器永远无法加载；
         // 只有显式的托盘 Quit 兜底才绕过确认弹窗。
@@ -252,7 +265,10 @@ fn build_tray_menu<R: tauri::Runtime, M: Manager<R>>(manager: &M) -> tauri::Resu
     MenuBuilder::new(manager).items(&[&show, &quit]).build()
 }
 
-fn setup_desktop_tray<R: tauri::Runtime, M: Manager<R>>(manager: &M, icon_theme: DesktopIconTheme) -> tauri::Result<()> {
+fn setup_desktop_tray<R: tauri::Runtime, M: Manager<R>>(
+    manager: &M,
+    icon_theme: DesktopIconTheme,
+) -> tauri::Result<()> {
     use tauri::menu::MenuEvent;
     use tauri::tray::TrayIconBuilder;
 
@@ -293,7 +309,11 @@ fn app_icon_black() -> tauri::image::Image<'static> {
 
 pub(crate) fn apply_desktop_settings(app: &tauri::AppHandle, settings: &DesktopSettings) -> tauri::Result<()> {
     apply_debug_log_level(settings.debug_logging_enabled);
-    if should_setup_desktop_tray(std::env::consts::OS, settings.show_tray_icon, linux_appindicator_available()) {
+    if should_setup_desktop_tray(
+        std::env::consts::OS,
+        settings.show_tray_icon,
+        linux_appindicator_available(),
+    ) {
         if app.tray_by_id(DESKTOP_TRAY_ID).is_none() {
             setup_desktop_tray(app, settings.icon_theme)?;
         }
@@ -310,7 +330,9 @@ pub fn run() {
     tauri::async_runtime::set(runtime_handle);
 
     startup_recovery::initialize();
-    rustls::crypto::ring::default_provider().install_default().expect("Failed to install rustls crypto provider");
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
     append_startup_probe("runtime prerequisites configured");
 
     let startup_begin = Instant::now();
@@ -376,12 +398,18 @@ pub fn run() {
 
             // 数据目录解析（默认 / 环境变量 / 便携模式）+ 回退导入
             append_startup_probe("resolving app data dir");
-            let default_data_dir =
-                app.path().app_data_dir().map_err(|e| e.to_string()).expect("Failed to resolve app data dir");
+            let default_data_dir = app
+                .path()
+                .app_data_dir()
+                .map_err(|e| e.to_string())
+                .expect("Failed to resolve app data dir");
             let data_dir_resolution = data_dir::resolve_data_dir_with_mode(default_data_dir);
             let data_dir = data_dir_resolution.data_dir.clone();
             std::fs::create_dir_all(&data_dir).expect("Failed to create data dir");
-            append_startup_probe(format!("data dir ready mode={}", startup_data_dir_mode(&data_dir_resolution.mode)));
+            append_startup_probe(format!(
+                "data dir ready mode={}",
+                startup_data_dir_mode(&data_dir_resolution.mode)
+            ));
             let alternative_data_dir = data_dir::alternative_data_dir(&data_dir_resolution);
             match app_core::storage::maybe_import_user_data_db(&data_dir, alternative_data_dir.as_deref()) {
                 Ok(result) => eprintln!("[STARTUP] data db fallback import: {result:?}"),
@@ -391,7 +419,9 @@ pub fn run() {
 
             append_startup_probe("opening storage file=app.db");
             let storage = tauri::async_runtime::block_on(async {
-                let s = Storage::open_unmigrated(&db_path).await.expect("Failed to open storage");
+                let s = Storage::open_unmigrated(&db_path)
+                    .await
+                    .expect("Failed to open storage");
                 append_startup_probe("storage opened");
                 s
             });
@@ -400,12 +430,13 @@ pub fn run() {
                 .unwrap_or(false);
             let migration_gate = Arc::new(migration_gate::MigrationGate::new(migration_ready));
             app.manage(migration_gate.clone());
-            app.manage(Arc::new(AppState { storage: Arc::new(storage) }));
+            app.manage(Arc::new(AppState {
+                storage: Arc::new(storage),
+            }));
 
-            let desktop_settings = tauri::async_runtime::block_on(
-                app.state::<Arc<AppState>>().storage.load_desktop_settings(),
-            )
-            .unwrap_or_default();
+            let desktop_settings =
+                tauri::async_runtime::block_on(app.state::<Arc<AppState>>().storage.load_desktop_settings())
+                    .unwrap_or_default();
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
                     .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
@@ -444,12 +475,7 @@ pub fn run() {
                     }
                     let gateway_for_server = gateway;
                     tauri::async_runtime::spawn(async move {
-                        match app_mcp::server_http::spawn_server(
-                            std::sync::Arc::new(gateway_for_server),
-                            port,
-                        )
-                        .await
-                        {
+                        match app_mcp::server_http::spawn_server(std::sync::Arc::new(gateway_for_server), port).await {
                             Ok(_) => eprintln!("[STARTUP] MCP gateway listening on 127.0.0.1:{port}/mcp"),
                             Err(e) => eprintln!("[STARTUP] MCP gateway failed to start: {e:#}"),
                         }
@@ -494,62 +520,69 @@ pub fn run() {
                 request_app_close(app, "settings");
             }
         })
-        .invoke_handler(migration_gate::guard_handler(route_external_commands(tauri::generate_handler![
-            // 设置
-            commands::app_settings::load_desktop_settings,
-            commands::app_settings::save_desktop_settings,
-            commands::app_settings::load_app_appearance_settings,
-            commands::app_settings::update_app_appearance_settings,
-            commands::app_settings::set_app_locale,
-            commands::app_settings::load_editor_settings,
-            commands::app_settings::save_editor_settings,
-            commands::app_settings::load_open_tabs_state,
-            commands::app_settings::save_open_tabs_state,
-            commands::app_settings::save_detached_tab_handoff,
-            commands::app_settings::load_detached_tab_handoff,
-            commands::app_settings::list_detached_tab_handoffs,
-            commands::app_settings::delete_detached_tab_handoff,
-            commands::app_settings::approve_detached_window_close,
-            commands::app_settings::load_native_debug_logs,
-            // 关闭行为
-            commands::app_settings::complete_app_close,
-            commands::app_settings::mark_frontend_ready,
-            commands::app_settings::request_app_close_from_window_controls,
-            // 开机自启动
-            commands::autostart::get_autostart_enabled,
-            commands::autostart::set_autostart_enabled,
-            // 窗口
-            commands::window_controls::set_macos_traffic_light_position,
-            // 更新
-            commands::update::check_for_updates,
-            commands::update::fetch_changelog,
-            commands::update::get_system_proxy_url,
-            commands::update::cancel_update_download,
-            commands::update::get_downloaded_update,
-            commands::update::discard_downloaded_update,
-            commands::update::download_update,
-            commands::update::install_downloaded_update,
-            // 深链接与文件
-            commands::deep_link::parse_deep_link,
-            commands::external_files::take_pending_files,
-            commands::fs_open::reveal_path_in_file_manager,
-            // 系统信息
-            commands::support_info::get_app_support_info,
-            commands::diagnostics::get_process_memory_info,
-            commands::system_fonts::list_system_fonts,
-            commands::keychain::read_keychain_password,
-            commands::keychain::read_keychain_passwords,
-            // 应用信息
-            commands::app_info::get_app_version,
-            commands::app_info::get_platform,
-            commands::app_info::show_main_window,
-            // MCP 网关
-            commands::mcp::mcp_status,
-            commands::mcp::mcp_reload_config,
-            commands::mcp::mcp_refresh_tools,
-            commands::mcp::mcp_kill_server,
-            commands::mcp::mcp_revive_server,
-        ])))
+        .invoke_handler(migration_gate::guard_handler(route_external_commands(
+            tauri::generate_handler![
+                // 设置
+                commands::app_settings::load_desktop_settings,
+                commands::app_settings::save_desktop_settings,
+                commands::app_settings::load_app_appearance_settings,
+                commands::app_settings::update_app_appearance_settings,
+                commands::app_settings::set_app_locale,
+                commands::app_settings::load_editor_settings,
+                commands::app_settings::save_editor_settings,
+                commands::app_settings::load_open_tabs_state,
+                commands::app_settings::save_open_tabs_state,
+                commands::app_settings::save_detached_tab_handoff,
+                commands::app_settings::load_detached_tab_handoff,
+                commands::app_settings::list_detached_tab_handoffs,
+                commands::app_settings::delete_detached_tab_handoff,
+                commands::app_settings::approve_detached_window_close,
+                commands::app_settings::load_native_debug_logs,
+                // 关闭行为
+                commands::app_settings::complete_app_close,
+                commands::app_settings::mark_frontend_ready,
+                commands::app_settings::request_app_close_from_window_controls,
+                // 开机自启动
+                commands::autostart::get_autostart_enabled,
+                commands::autostart::set_autostart_enabled,
+                // 窗口
+                commands::window_controls::set_macos_traffic_light_position,
+                // 更新
+                commands::update::check_for_updates,
+                commands::update::fetch_changelog,
+                commands::update::get_system_proxy_url,
+                commands::update::cancel_update_download,
+                commands::update::get_downloaded_update,
+                commands::update::discard_downloaded_update,
+                commands::update::download_update,
+                commands::update::install_downloaded_update,
+                // 深链接与文件
+                commands::deep_link::parse_deep_link,
+                commands::external_files::take_pending_files,
+                commands::fs_open::reveal_path_in_file_manager,
+                // 系统信息
+                commands::support_info::get_app_support_info,
+                commands::diagnostics::get_process_memory_info,
+                commands::system_fonts::list_system_fonts,
+                commands::keychain::read_keychain_password,
+                commands::keychain::read_keychain_passwords,
+                // 应用信息
+                commands::app_info::get_app_version,
+                commands::app_info::get_platform,
+                commands::app_info::show_main_window,
+                // MCP 网关
+                commands::mcp::mcp_status,
+                commands::mcp::mcp_reload_config,
+                commands::mcp::mcp_refresh_tools,
+                commands::mcp::mcp_kill_server,
+                commands::mcp::mcp_revive_server,
+                commands::mcp::mcp_get_config,
+                commands::mcp::mcp_save_config,
+                // 业务示例命令（脚手架，替换成你自己的）
+                commands::business::business_ping,
+                commands::business::business_echo,
+            ],
+        )))
         .build(tauri::generate_context!())
         .inspect(|app| {
             append_startup_probe(format!("tauri application built after {:?}", startup_begin.elapsed()));

@@ -6,6 +6,7 @@
 pub mod app_info;
 pub mod app_settings;
 pub mod autostart;
+pub mod business;
 pub mod deep_link;
 pub mod diagnostics;
 pub mod external_files;

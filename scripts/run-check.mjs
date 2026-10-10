@@ -17,7 +17,11 @@ const tasks = [
 
 function runTask(task) {
   const startedAt = performance.now();
-  const child = spawn(task.command, task.args, {
+  // 经 shell 执行：Windows 上 node_modules/.bin 里是 .cmd 垫片，
+  // Node 18+ 出于安全不再允许无 shell 直接 spawn .bat/.cmd。
+  // 传整条命令串（不用 args 数组），避免 Node 对 shell+args 的弃用告警。
+  const child = spawn([task.command, ...task.args].join(" "), {
+    shell: true,
     cwd: process.cwd(),
     env: {
       ...process.env,
@@ -33,7 +37,13 @@ function runTask(task) {
 
   return new Promise((resolve) => {
     child.on("error", (error) => {
-      resolve({ ...task, code: 1, durationMs: performance.now() - startedAt, output: "", errorOutput: error.stack ?? String(error) });
+      resolve({
+        ...task,
+        code: 1,
+        durationMs: performance.now() - startedAt,
+        output: "",
+        errorOutput: error.stack ?? String(error),
+      });
     });
     child.on("close", (code) => {
       resolve({

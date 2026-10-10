@@ -17,7 +17,9 @@ pub struct DeepLinkOpenState {
 
 impl DeepLinkOpenState {
     pub fn new() -> Self {
-        Self { last_routed: Mutex::new(None) }
+        Self {
+            last_routed: Mutex::new(None),
+        }
     }
 
     /// 返回 true 表示链接是新批次（应 emit 给前端）。
@@ -56,13 +58,23 @@ pub fn parse_deep_link(link: String) -> Result<DeepLink, String> {
         .strip_prefix(APP_SCHEME)
         .ok_or_else(|| format!("unsupported deep link scheme: {link}"))?;
     let (path_part, query_part) = rest.split_once('?').unwrap_or((rest, ""));
-    let path = percent_encoding::percent_decode_str(path_part).decode_utf8_lossy().to_string();
+    let path = percent_encoding::percent_decode_str(path_part)
+        .decode_utf8_lossy()
+        .to_string();
     let mut query = std::collections::HashMap::new();
     for pair in query_part.split('&').filter(|pair| !pair.is_empty()) {
         let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
-        let key = percent_encoding::percent_decode_str(key).decode_utf8_lossy().to_string();
-        let value = percent_encoding::percent_decode_str(value).decode_utf8_lossy().to_string();
+        let key = percent_encoding::percent_decode_str(key)
+            .decode_utf8_lossy()
+            .to_string();
+        let value = percent_encoding::percent_decode_str(value)
+            .decode_utf8_lossy()
+            .to_string();
         query.insert(key, value);
     }
-    Ok(DeepLink { scheme: "myapp".to_string(), path, query })
+    Ok(DeepLink {
+        scheme: "myapp".to_string(),
+        path,
+        query,
+    })
 }

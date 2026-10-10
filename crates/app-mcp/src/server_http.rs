@@ -17,8 +17,8 @@ use serde_json::{json, Value};
 
 use crate::gateway::GatewayHandle;
 use crate::protocol::{
-    error_response, initialize_result, ok_response, JsonRpcRequest, JsonRpcResponse,
-    MCP_TOOL_NOT_FOUND, JSONRPC_INVALID_REQUEST, JSONRPC_METHOD_NOT_FOUND,
+    error_response, initialize_result, ok_response, JsonRpcRequest, JsonRpcResponse, JSONRPC_INVALID_REQUEST,
+    JSONRPC_METHOD_NOT_FOUND, MCP_TOOL_NOT_FOUND,
 };
 
 type SharedGateway = Arc<GatewayHandle>;
@@ -41,7 +41,10 @@ pub async fn spawn_server(gateway: SharedGateway, port: u16) -> anyhow::Result<t
 /// (Auto warm-start is spawned by the host — see src-tauri setup — using
 /// `GatewayHandle::run_warm_start` on the host's own async runtime.)
 /// Used from the Tauri setup path.
-pub async fn start_gateway(config_path: &std::path::Path, cache_path: &std::path::Path) -> anyhow::Result<(GatewayHandle, u16, tokio::task::JoinHandle<()>)> {
+pub async fn start_gateway(
+    config_path: &std::path::Path,
+    cache_path: &std::path::Path,
+) -> anyhow::Result<(GatewayHandle, u16, tokio::task::JoinHandle<()>)> {
     let gateway = GatewayHandle::load(config_path, cache_path)?;
     let port = gateway.port().await;
     let handle = spawn_server(Arc::new(gateway.clone()), port).await?;
@@ -180,19 +183,25 @@ async fn handle_post(
                 }
                 Err(e) => {
                     let msg = e.to_string();
-                    (None, JsonRpcResponse {
-                        jsonrpc: "2.0".into(),
-                        id,
-                        result: Some(json!({
-                            "content": [{"type": "text", "text": format!("MCP call failed: {msg}")}],
-                            "isError": true
-                        })),
-                        error: None,
-                    })
+                    (
+                        None,
+                        JsonRpcResponse {
+                            jsonrpc: "2.0".into(),
+                            id,
+                            result: Some(json!({
+                                "content": [{"type": "text", "text": format!("MCP call failed: {msg}")}],
+                                "isError": true
+                            })),
+                            error: None,
+                        },
+                    )
                 }
             }
         }
-        other => (None, error_response(id, JSONRPC_METHOD_NOT_FOUND, format!("method not found: {other}"))),
+        other => (
+            None,
+            error_response(id, JSONRPC_METHOD_NOT_FOUND, format!("method not found: {other}")),
+        ),
     };
 
     // MCP_TOOL_NOT_FOUND unused here but kept for API symmetry

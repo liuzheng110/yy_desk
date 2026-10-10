@@ -24,7 +24,9 @@ fn read_keychain_password_blocking(service: String, account: Option<String>) -> 
         cmd.args(["-a", acct]);
     }
 
-    let output = cmd.output().map_err(|e| format!("Failed to run security command: {e}"))?;
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to run security command: {e}"))?;
 
     if output.status.success() {
         let password = String::from_utf8_lossy(&output.stdout).trim().to_string();

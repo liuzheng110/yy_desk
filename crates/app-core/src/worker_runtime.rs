@@ -10,5 +10,8 @@ pub const WORKER_STACK_SIZE: usize = 16 * 1024 * 1024;
 
 /// 构建被所有进程复用的多线程 runtime，栈足够容纳嵌套 future。
 pub fn worker_runtime() -> std::io::Result<tokio::runtime::Runtime> {
-    tokio::runtime::Builder::new_multi_thread().enable_all().thread_stack_size(WORKER_STACK_SIZE).build()
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_stack_size(WORKER_STACK_SIZE)
+        .build()
 }

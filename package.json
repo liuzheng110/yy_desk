@@ -1,6 +1,6 @@
 {
   "name": "myapp",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -13,6 +13,13 @@
     "build:checked": "pnpm typecheck && pnpm build",
     "check": "node scripts/run-check.mjs",
     "preview": "vite preview --config apps/desktop/vite.config.ts",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "fmt:rs": "cargo fmt -p myapp -p app-core -p app-platform -p app-mcp",
+    "fmt:rs:check": "cargo fmt -p myapp -p app-core -p app-platform -p app-mcp -- --check",
+    "sync-version": "node scripts/sync-version.mjs",
     "tauri": "tauri",
     "release": "node scripts/release.mjs",
     "test:release": "node --test scripts/release.test.mjs"
@@ -23,10 +30,17 @@
     "vue": "^3.5.35"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^25.9.1",
     "@vitejs/plugin-vue": "^6.0.7",
+    "eslint": "^10.12.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-vue": "^10.11.1",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.9",
     "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.1",
     "vite": "^8.2.1",
     "vue-tsc": "^3.3.3"
   },

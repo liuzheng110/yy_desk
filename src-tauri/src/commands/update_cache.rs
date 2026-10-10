@@ -55,13 +55,20 @@ pub(super) fn commit(root: &Path, record: &CacheRecord, bytes: &[u8]) -> Result<
     fs::create_dir_all(root)
         .map_err(|error| context("Failed to create the MyApp update cache directory", root, error))?;
     let staging = root.join(format!("partial-{}", uuid::Uuid::new_v4()));
-    fs::create_dir(&staging)
-        .map_err(|error| context("Failed to create the MyApp update cache staging directory", &staging, error))?;
+    fs::create_dir(&staging).map_err(|error| {
+        context(
+            "Failed to create the MyApp update cache staging directory",
+            &staging,
+            error,
+        )
+    })?;
     let result = (|| {
         write_synced(&staging.join("package"), bytes)?;
         write_synced(&staging.join("metadata.json"), &metadata)?;
         #[cfg(unix)]
-        fs::File::open(&staging).and_then(|dir| dir.sync_all()).map_err(|e| e.to_string())?;
+        fs::File::open(&staging)
+            .and_then(|dir| dir.sync_all())
+            .map_err(|e| e.to_string())?;
         let ready = root.join("ready");
         // Windows cannot rename onto an existing directory: `fs::rename` fails with
         // `os error 5` when `ready` is still present from an earlier attempt. Clear
@@ -70,7 +77,9 @@ pub(super) fn commit(root: &Path, record: &CacheRecord, bytes: &[u8]) -> Result<
         fs::rename(&staging, &ready)
             .map_err(|error| context("Failed to finalize the MyApp update cache", &ready, error))?;
         #[cfg(unix)]
-        fs::File::open(root).and_then(|dir| dir.sync_all()).map_err(|e| e.to_string())?;
+        fs::File::open(root)
+            .and_then(|dir| dir.sync_all())
+            .map_err(|e| e.to_string())?;
         Ok(())
     })();
     if result.is_err() {
@@ -152,7 +161,11 @@ pub(super) fn cleanup_partial(root: &Path) -> Result<(), String> {
         if entry.file_name().to_string_lossy().starts_with("partial-") {
             let path = entry.path();
             let action = "Failed to remove an incomplete MyApp update cache entry";
-            if entry.file_type().map_err(|error| context(action, &path, error))?.is_dir() {
+            if entry
+                .file_type()
+                .map_err(|error| context(action, &path, error))?
+                .is_dir()
+            {
                 fs::remove_dir_all(&path).map_err(|error| context(action, &path, error))?;
             } else {
                 fs::remove_file(&path).map_err(|error| context(action, &path, error))?;
@@ -178,7 +191,10 @@ pub(super) fn discard(root: &Path) -> Result<(), String> {
 
 pub(super) fn root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     use tauri::Manager;
-    app.path().app_cache_dir().map(|p| p.join("signed-update-v1")).map_err(|e| e.to_string())
+    app.path()
+        .app_cache_dir()
+        .map(|p| p.join("signed-update-v1"))
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -282,7 +298,11 @@ mod tests {
         fs::write(root.join("ready/package"), b"signed payload").unwrap();
         let mut wrong_schema = record.clone();
         wrong_schema.schema_version = 99;
-        fs::write(root.join("ready/metadata.json"), serde_json::to_vec(&wrong_schema).unwrap()).unwrap();
+        fs::write(
+            root.join("ready/metadata.json"),
+            serde_json::to_vec(&wrong_schema).unwrap(),
+        )
+        .unwrap();
         assert!(read(&root).unwrap_err().contains("schema"));
         fs::write(root.join("ready/metadata.json"), b"truncated").unwrap();
         assert!(read(&root).is_err());

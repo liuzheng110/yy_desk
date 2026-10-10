@@ -95,10 +95,16 @@ fn compatibility_profile_path_from_inputs(
     windows_appdata: Option<OsString>,
 ) -> (Option<PathBuf>, &'static str) {
     if let Some(dir) = local_appdata.filter(|value| !value.is_empty()).map(PathBuf::from) {
-        return (Some(dir.join(WINDOWS_APP_DATA_DIR_NAME).join(COMPATIBILITY_PROFILE_DIR)), "local_appdata");
+        return (
+            Some(dir.join(WINDOWS_APP_DATA_DIR_NAME).join(COMPATIBILITY_PROFILE_DIR)),
+            "local_appdata",
+        );
     }
     if let Some(dir) = windows_appdata.filter(|value| !value.is_empty()).map(PathBuf::from) {
-        return (Some(dir.join(WINDOWS_APP_DATA_DIR_NAME).join(COMPATIBILITY_PROFILE_DIR)), "appdata_fallback");
+        return (
+            Some(dir.join(WINDOWS_APP_DATA_DIR_NAME).join(COMPATIBILITY_PROFILE_DIR)),
+            "appdata_fallback",
+        );
     }
     (None, "unavailable")
 }
@@ -121,7 +127,9 @@ fn compatibility_profile_ready_record(profile_source: &str) -> String {
 }
 
 fn configure_recovery_child(command: &mut std::process::Command, parent_pid: u32) {
-    command.env(RECOVERY_ATTEMPT_ENV, "1").env(RECOVERY_PARENT_PID_ENV, parent_pid.to_string());
+    command
+        .env(RECOVERY_ATTEMPT_ENV, "1")
+        .env(RECOVERY_PARENT_PID_ENV, parent_pid.to_string());
 }
 
 #[cfg(target_os = "windows")]
@@ -129,7 +137,9 @@ fn wait_for_recovery_parent_exit() -> &'static str {
     use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0, WAIT_TIMEOUT};
     use windows_sys::Win32::System::Threading::{OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE};
 
-    let parent_pid = std::env::var(RECOVERY_PARENT_PID_ENV).ok().and_then(|value| value.parse::<u32>().ok());
+    let parent_pid = std::env::var(RECOVERY_PARENT_PID_ENV)
+        .ok()
+        .and_then(|value| value.parse::<u32>().ok());
     std::env::remove_var(RECOVERY_PARENT_PID_ENV);
     let Some(parent_pid) = parent_pid.filter(|pid| *pid != 0) else {
         return "parent_pid_unavailable";
@@ -180,11 +190,18 @@ fn write_line(path: &Path, line: &str) {
 #[cfg(target_os = "windows")]
 pub(crate) fn record_runtime_recovery_event(message: impl AsRef<str>) {
     let Some(dir) = startup_log_dir() else { return };
-    write_line(&dir.join(RUNTIME_RECOVERY_LOG_FILE), &format_probe_line(message.as_ref()));
+    write_line(
+        &dir.join(RUNTIME_RECOVERY_LOG_FILE),
+        &format_probe_line(message.as_ref()),
+    );
 }
 
 fn format_probe_line(message: &str) -> String {
-    format!("[{}][pid={}] {message}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f"), std::process::id())
+    format!(
+        "[{}][pid={}] {message}",
+        chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f"),
+        std::process::id()
+    )
 }
 
 fn append_persisted_record(message: impl AsRef<str>) {
@@ -220,7 +237,9 @@ pub(crate) fn initialize() {
     }
 
     {
-        let mut state = STARTUP_PROBE_STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut state = STARTUP_PROBE_STATE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         *state = StartupProbeState {
             persistent: recovery_attempt,
             lines: VecDeque::with_capacity(STARTUP_LOG_BUFFER_CAPACITY),
@@ -231,7 +250,10 @@ pub(crate) fn initialize() {
     ENTERPRISE_COMPAT.store(enterprise_compat, Ordering::Release);
     ENTERPRISE_COMPAT_DISABLED.store(enterprise_compat_disabled, Ordering::Release);
     RUN_EVENT_COUNT.store(0, Ordering::Release);
-    *FRONTEND_READY_SIGNAL.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = false;
+    *FRONTEND_READY_SIGNAL
+        .0
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = false;
 
     install_panic_hook();
     record(format!(
@@ -256,7 +278,9 @@ pub(crate) fn record(message: impl AsRef<str>) {
     }
     let line = format_probe_line(message.as_ref());
     let persistent = {
-        let mut state = STARTUP_PROBE_STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut state = STARTUP_PROBE_STATE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if !STARTUP_PROBE_ACTIVE.load(Ordering::Acquire) {
             return;
         }
@@ -275,7 +299,9 @@ pub(crate) fn record(message: impl AsRef<str>) {
 
 fn persist_buffer() {
     let lines = {
-        let mut state = STARTUP_PROBE_STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut state = STARTUP_PROBE_STATE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if state.persistent {
             return;
         }
@@ -352,7 +378,9 @@ fn configure_webview2_compatibility(enterprise_compat: bool) {
             "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
             webview2_compatibility_arguments(args, enterprise_compat, manual_no_sandbox),
         );
-        record(format!("WebView2 no-sandbox enabled enterprise_compat={enterprise_compat} manual={manual_no_sandbox}"));
+        record(format!(
+            "WebView2 no-sandbox enabled enterprise_compat={enterprise_compat} manual={manual_no_sandbox}"
+        ));
     }
     if enterprise_compat {
         record("WebView2 GPU acceleration disabled for enterprise compatibility recovery");
@@ -417,7 +445,9 @@ pub(crate) fn start_watchdog<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
         }
         let main_window = app.get_webview_window("main");
         let main_exists = main_window.is_some();
-        let main_visible = main_window.as_ref().is_some_and(|window| window.is_visible().unwrap_or(false));
+        let main_visible = main_window
+            .as_ref()
+            .is_some_and(|window| window.is_visible().unwrap_or(false));
         record(format!(
             "startup watchdog after {}s run_event_count={run_event_count} main_exists={main_exists} main_visible={main_visible}",
             STARTUP_WATCHDOG_DELAY.as_secs()
@@ -477,7 +507,11 @@ fn deactivate_probe() {
     let (signal, wake) = &*FRONTEND_READY_SIGNAL;
     *signal.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = true;
     wake.notify_all();
-    STARTUP_PROBE_STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).lines.clear();
+    STARTUP_PROBE_STATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .lines
+        .clear();
 }
 
 pub(crate) fn mark_frontend_ready(main_window_visible: bool) {
@@ -525,7 +559,12 @@ fn windows_ok_message(title: &str, body: &str) {
     let title = title.encode_utf16().chain(std::iter::once(0)).collect::<Vec<_>>();
     let body = body.encode_utf16().chain(std::iter::once(0)).collect::<Vec<_>>();
     unsafe {
-        MessageBoxW(std::ptr::null_mut(), body.as_ptr(), title.as_ptr(), MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
+        MessageBoxW(
+            std::ptr::null_mut(),
+            body.as_ptr(),
+            title.as_ptr(),
+            MB_OK | MB_ICONWARNING | MB_SETFOREGROUND,
+        );
     }
 }
 
@@ -535,8 +574,9 @@ fn confirm_keep_compatibility_mode() -> bool {
         MessageBoxW, IDYES, MB_DEFBUTTON2, MB_ICONWARNING, MB_SETFOREGROUND, MB_YESNO,
     };
 
-    let log_path =
-        startup_log_path().map(|path| path.display().to_string()).unwrap_or_else(|| "startup.log".to_string());
+    let log_path = startup_log_path()
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| "startup.log".to_string());
     let locale = sys_locale::get_locale().unwrap_or_default().to_ascii_lowercase();
     let body = if locale.starts_with("zh") {
         format!(
@@ -566,8 +606,9 @@ fn confirm_keep_compatibility_mode() -> bool {
 
 #[cfg(target_os = "windows")]
 fn show_recovery_failure_message() {
-    let log_path =
-        startup_log_path().map(|path| path.display().to_string()).unwrap_or_else(|| "startup.log".to_string());
+    let log_path = startup_log_path()
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| "startup.log".to_string());
     let locale = sys_locale::get_locale().unwrap_or_default().to_ascii_lowercase();
     let body = if locale.starts_with("zh") {
         format!("MyApp 已尝试企业环境兼容模式，但主窗口仍未显示。\n\n请将此日志发给维护者：{log_path}")
@@ -642,7 +683,9 @@ mod tests {
     #[test]
     fn recovery_only_triggers_for_the_observed_hard_startup_stall() {
         assert!(should_attempt_enterprise_recovery(true, false, false, 0, false, false));
-        assert!(!should_attempt_enterprise_recovery(false, false, false, 0, false, false));
+        assert!(!should_attempt_enterprise_recovery(
+            false, false, false, 0, false, false
+        ));
         assert!(!should_attempt_enterprise_recovery(true, true, false, 0, false, false));
         assert!(!should_attempt_enterprise_recovery(true, false, false, 1, false, false));
         assert!(!should_attempt_enterprise_recovery(true, false, false, 0, true, true));
@@ -708,7 +751,10 @@ mod tests {
     fn webview2_recovery_arguments_only_disable_gpu_for_enterprise_compatibility() {
         let existing = "--remote-debugging-port=9222".to_string();
 
-        assert_eq!(webview2_compatibility_arguments(existing.clone(), false, false), existing);
+        assert_eq!(
+            webview2_compatibility_arguments(existing.clone(), false, false),
+            existing
+        );
         assert_eq!(
             webview2_compatibility_arguments(existing.clone(), false, true),
             "--remote-debugging-port=9222 --no-sandbox"

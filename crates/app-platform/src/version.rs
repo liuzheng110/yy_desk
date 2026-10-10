@@ -3,7 +3,10 @@ pub fn normalize_version(version: &str) -> String {
 }
 
 pub fn parse_version(version: &str) -> Vec<u64> {
-    normalize_version(version).split(['.', '-', '+']).map(|part| part.parse::<u64>().unwrap_or(0)).collect()
+    normalize_version(version)
+        .split(['.', '-', '+'])
+        .map(|part| part.parse::<u64>().unwrap_or(0))
+        .collect()
 }
 
 pub fn is_newer_version(latest: &str, current: &str) -> bool {

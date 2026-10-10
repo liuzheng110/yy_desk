@@ -1,7 +1,13 @@
-use std::{path::{Path, PathBuf}, time::Duration};
 use app_mcp::{app_launcher::AppLauncher, config::AppAutoStartConfig, GatewayHandle};
 use serde_json::{json, Value};
-use tokio::{net::TcpStream, time::{sleep, timeout}};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
+use tokio::{
+    net::TcpStream,
+    time::{sleep, timeout},
+};
 
 fn app_config(dir: &Path, mode: &str) -> Value {
     json!({
@@ -16,30 +22,44 @@ fn app_config(dir: &Path, mode: &str) -> Value {
 
 fn make_gateway(dir: &Path, auto_start: Value) -> GatewayHandle {
     let cfg = dir.join("config.json");
-    std::fs::write(&cfg, json!({"servers": [{
-        "name": "app", "transport": "stdio", "command": "python",
-        "args": [Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/mock_stdio_mcp.py")],
-        "autoStart": auto_start,
-    }]}).to_string()).unwrap();
+    std::fs::write(
+        &cfg,
+        json!({"servers": [{
+            "name": "app", "transport": "stdio", "command": "python",
+            "args": [Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/mock_stdio_mcp.py")],
+            "autoStart": auto_start,
+        }]})
+        .to_string(),
+    )
+    .unwrap();
     GatewayHandle::load(&cfg, &dir.join("cache.json")).unwrap()
 }
 
 async fn call(gateway: &GatewayHandle) {
-    let result = gateway.call_tool_by_server("app", "echo", json!({"text":"ready"})).await.unwrap();
+    let result = gateway
+        .call_tool_by_server("app", "echo", json!({"text":"ready"}))
+        .await
+        .unwrap();
     assert_eq!(result["content"][0]["text"], "echo:ready");
 }
 
 async fn stop_app(dir: &Path, mode: &str) {
     let contents = std::fs::read_to_string(dir.join("port")).unwrap();
     let port = if mode == "json" {
-        serde_json::from_str::<Value>(&contents).unwrap()["port"].as_u64().unwrap() as u16
-    } else { contents.trim().parse::<u16>().unwrap() };
+        serde_json::from_str::<Value>(&contents).unwrap()["port"]
+            .as_u64()
+            .unwrap() as u16
+    } else {
+        contents.trim().parse::<u16>().unwrap()
+    };
     std::fs::write(dir.join("stop"), "stop").unwrap();
     timeout(Duration::from_secs(5), async {
         while TcpStream::connect(("127.0.0.1", port)).await.is_ok() {
             sleep(Duration::from_millis(100)).await;
         }
-    }).await.unwrap();
+    })
+    .await
+    .unwrap();
     // Let the exited launcher become observable through Child::try_wait.
     sleep(Duration::from_millis(150)).await;
 }
@@ -63,7 +83,10 @@ async fn lazy_start_concurrent_calls_refresh_restart_and_app_lifetime() {
         std::fs::write(dir.path().join("port"), "stale").unwrap();
         let gateway = make_gateway(dir.path(), app_config(dir.path(), mode));
         assert!(gateway.list_all_tools().await.is_empty());
-        assert!(!dir.path().join("starts").exists(), "cached discovery must not launch apps");
+        assert!(
+            !dir.path().join("starts").exists(),
+            "cached discovery must not launch apps"
+        );
         gateway.kill_server("app").await.unwrap();
         assert!(gateway.call_tool_by_server("app", "echo", json!({})).await.is_err());
         assert!(gateway.refresh_tools().await.iter().all(|r| !r.ok));
@@ -72,22 +95,44 @@ async fn lazy_start_concurrent_calls_refresh_restart_and_app_lifetime() {
         let mut tasks = tokio::task::JoinSet::new();
         for _ in 0..4 {
             let gw = gateway.clone();
-            tasks.spawn(async move { call(&gw).await; });
+            tasks.spawn(async move {
+                call(&gw).await;
+            });
         }
-        while let Some(result) = tasks.join_next().await { result.unwrap(); }
-        assert_eq!(std::fs::read_to_string(dir.path().join("starts")).unwrap().lines().count(), 1);
+        while let Some(result) = tasks.join_next().await {
+            result.unwrap();
+        }
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("starts"))
+                .unwrap()
+                .lines()
+                .count(),
+            1
+        );
         call(&gateway).await;
         stop_app(dir.path(), mode).await;
         std::fs::remove_file(dir.path().join("stop")).unwrap();
         let reports = gateway.refresh_tools().await;
         assert!(reports.iter().all(|r| r.ok), "manual refresh: {reports:?}");
-        assert_eq!(std::fs::read_to_string(dir.path().join("starts")).unwrap().lines().count(), 2);
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("starts"))
+                .unwrap()
+                .lines()
+                .count(),
+            2
+        );
         call(&gateway).await;
         drop(gateway);
         let config: AppAutoStartConfig = serde_json::from_value(app_config(dir.path(), mode)).unwrap();
         // The app survives gateway drop; a new launcher must use the live port.
         AppLauncher::default().ensure_ready(Some(&config)).await.unwrap();
-        assert_eq!(std::fs::read_to_string(dir.path().join("starts")).unwrap().lines().count(), 2);
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("starts"))
+                .unwrap()
+                .lines()
+                .count(),
+            2
+        );
         stop_app(dir.path(), mode).await;
     }
 }
@@ -103,13 +148,24 @@ async fn disabled_invalid_executable_and_bounded_timeout() {
     assert!(!dir.path().join("starts").exists());
     cfg.enabled = true;
     cfg.command = dir.path().join("nonexistent-app").to_string_lossy().into_owned();
-    assert!(launcher.ensure_ready(Some(&cfg)).await.unwrap_err().to_string().contains("自动启动应用失败"));
+    assert!(launcher
+        .ensure_ready(Some(&cfg))
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("自动启动应用失败"));
     cfg.command = "python".into();
     cfg.startup_timeout_ms = 600;
     for _ in 0..2 {
         let error = launcher.ensure_ready(Some(&cfg)).await.unwrap_err();
         assert!(error.to_string().contains("超时"), "{error:#}");
     }
-    assert_eq!(std::fs::read_to_string(dir.path().join("starts")).unwrap().lines().count(), 1,
-        "timed-out but live app must not be spawned repeatedly");
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("starts"))
+            .unwrap()
+            .lines()
+            .count(),
+        1,
+        "timed-out but live app must not be spawned repeatedly"
+    );
 }

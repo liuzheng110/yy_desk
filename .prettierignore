@@ -1,0 +1,8 @@
+dist/
+node_modules/
+target/
+vendor/
+.signing/
+src-tauri/gen/
+pnpm-lock.yaml
+*.md

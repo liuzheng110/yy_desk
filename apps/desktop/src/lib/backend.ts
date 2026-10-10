@@ -77,4 +77,10 @@ export const backend = {
   mcpRefreshTools: () => invoke<any>("mcp_refresh_tools"),
   mcpKillServer: (name: string) => invoke<any>("mcp_kill_server", { name }),
   mcpReviveServer: (name: string) => invoke<any>("mcp_revive_server", { name }),
+  mcpGetConfig: () => invoke<{ path: string; config: unknown }>("mcp_get_config"),
+  mcpSaveConfig: (config: unknown) => invoke<any>("mcp_save_config", { config }),
+
+  // 业务示例命令（脚手架，替换成你自己的）
+  businessPing: (name?: string) => invoke<string>("business_ping", { name }),
+  businessEcho: (payload: unknown) => invoke<unknown>("business_echo", { payload }),
 };

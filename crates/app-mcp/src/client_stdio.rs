@@ -51,9 +51,7 @@ impl StdioMcpClient {
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::inherit());
 
-        let mut child = cmd
-            .spawn()
-            .with_context(|| format!("spawn stdio MCP `{command}`"))?;
+        let mut child = cmd.spawn().with_context(|| format!("spawn stdio MCP `{command}`"))?;
         #[cfg(windows)]
         let job = own_process_tree(&child).context("track stdio MCP process tree")?;
         let stdin = child.stdin.take().context("stdio MCP stdin unavailable")?;
@@ -145,10 +143,7 @@ impl StdioMcpClient {
 
     pub async fn call_tool(&mut self, name: &str, arguments: Value) -> anyhow::Result<Value> {
         let res = self
-            .request(
-                "tools/call",
-                json!({"name": name, "arguments": arguments}),
-            )
+            .request("tools/call", json!({"name": name, "arguments": arguments}))
             .await?;
         Ok(res)
     }
@@ -170,9 +165,8 @@ impl Drop for StdioMcpClient {
 fn own_process_tree(child: &Child) -> anyhow::Result<std::os::windows::io::OwnedHandle> {
     use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
     use windows_sys::Win32::System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
-        SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
     };
 
     // SAFETY: the unnamed job handle is uniquely owned, the information buffer
@@ -190,7 +184,8 @@ fn own_process_tree(child: &Child) -> anyhow::Result<std::os::windows::io::Owned
             JobObjectExtendedLimitInformation,
             &info as *const _ as *const _,
             std::mem::size_of_val(&info) as u32,
-        ) == 0 {
+        ) == 0
+        {
             return Err(std::io::Error::last_os_error().into());
         }
         let process = child.raw_handle().context("stdio MCP already exited")?;

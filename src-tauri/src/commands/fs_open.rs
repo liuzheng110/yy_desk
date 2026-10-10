@@ -38,7 +38,10 @@ pub fn reveal_in_file_manager(path: &Path) -> Result<(), String> {
 
     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
     {
-        let target: PathBuf = path.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| path.to_path_buf());
+        let target: PathBuf = path
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| path.to_path_buf());
         app_platform::process::new_std_command("xdg-open")
             .arg(&target)
             .spawn()
@@ -84,7 +87,11 @@ pub async fn is_sqlite_database_file(path: String) -> Result<bool, String> {
 fn validate_database_backup_root(raw: &str) -> Result<PathBuf, String> {
     let expanded = expand_tilde(raw.trim());
     let root = PathBuf::from(&expanded);
-    if !root.is_absolute() || root.components().any(|component| matches!(component, Component::ParentDir)) {
+    if !root.is_absolute()
+        || root
+            .components()
+            .any(|component| matches!(component, Component::ParentDir))
+    {
         return Err(format!("backup root is not an absolute normalized path: {expanded}"));
     }
     std::fs::canonicalize(&root).map_err(|error| format!("failed to resolve backup root {}: {error}", root.display()))
@@ -101,13 +108,18 @@ fn validate_database_backup_file(raw: &str, allowed_roots: &[PathBuf]) -> Result
     if !path.is_absolute() {
         return Err(format!("backup file path is not absolute: {expanded}"));
     }
-    if path.components().any(|component| matches!(component, Component::ParentDir)) {
+    if path
+        .components()
+        .any(|component| matches!(component, Component::ParentDir))
+    {
         return Err(format!("backup file path is not normalized: {expanded}"));
     }
     let file_name = path.file_name().and_then(|name| name.to_str()).unwrap_or_default();
     let lower_file_name = file_name.to_ascii_lowercase();
     if !(lower_file_name.ends_with(".sql") || lower_file_name.ends_with(".sql.gz")) {
-        return Err(format!("backup file must use the .sql or .sql.gz extension: {expanded}"));
+        return Err(format!(
+            "backup file must use the .sql or .sql.gz extension: {expanded}"
+        ));
     }
     if file_name.chars().any(char::is_control) {
         return Err(format!("backup file name contains control characters: {expanded}"));
@@ -123,10 +135,20 @@ fn validate_database_backup_file(raw: &str, allowed_roots: &[PathBuf]) -> Result
                 }
                 return Ok(None);
             }
-            Err(error) => return Err(format!("failed to resolve custom backup file {}: {error}", path.display())),
+            Err(error) => {
+                return Err(format!(
+                    "failed to resolve custom backup file {}: {error}",
+                    path.display()
+                ))
+            }
         };
-        if !allowed_roots.iter().any(|root| resolved.starts_with(root) && resolved != *root) {
-            return Err(format!("custom backup file is outside the managed backup directories: {expanded}"));
+        if !allowed_roots
+            .iter()
+            .any(|root| resolved.starts_with(root) && resolved != *root)
+        {
+            return Err(format!(
+                "custom backup file is outside the managed backup directories: {expanded}"
+            ));
         }
     }
     Ok(Some(path))
@@ -137,9 +159,14 @@ pub async fn delete_database_backup_files(paths: Vec<String>, allowed_roots: Vec
     // A disconnected destination must not prevent cleanup of files from the
     // other selected runs. Invalid or unavailable roots simply grant no
     // authority for custom-named files.
-    let roots = allowed_roots.iter().filter_map(|root| validate_database_backup_root(root).ok()).collect::<Vec<_>>();
-    let resolved =
-        paths.iter().map(|path| validate_database_backup_file(path, &roots)).collect::<Result<Vec<_>, _>>()?;
+    let roots = allowed_roots
+        .iter()
+        .filter_map(|root| validate_database_backup_root(root).ok())
+        .collect::<Vec<_>>();
+    let resolved = paths
+        .iter()
+        .map(|path| validate_database_backup_file(path, &roots))
+        .collect::<Result<Vec<_>, _>>()?;
     let mut deleted = 0;
     for path in resolved.into_iter().flatten() {
         match tokio::fs::remove_file(&path).await {
@@ -199,19 +226,37 @@ mod tests {
     #[test]
     fn database_backup_file_requires_absolute_sql_path() {
         assert!(validate_database_backup_file("relative/backup.sql", &[]).is_err());
-        let invalid_extension = if cfg!(windows) { "C:/tmp/backup.txt" } else { "/tmp/backup.txt" };
+        let invalid_extension = if cfg!(windows) {
+            "C:/tmp/backup.txt"
+        } else {
+            "/tmp/backup.txt"
+        };
         assert!(validate_database_backup_file(invalid_extension, &[]).is_err());
         // 不存在的自定义命名备份：归属无法确认时按跳过处理（Ok(None)）而不是报错。
         let missing = format!("before-migration__{}.sql", uuid::Uuid::new_v4().simple(),);
-        let custom_missing = if cfg!(windows) { format!("C:/tmp/{missing}") } else { format!("/tmp/{missing}") };
+        let custom_missing = if cfg!(windows) {
+            format!("C:/tmp/{missing}")
+        } else {
+            format!("/tmp/{missing}")
+        };
         assert_eq!(validate_database_backup_file(&custom_missing, &[]), Ok(None));
-        let control_character =
-            if cfg!(windows) { "C:/tmp/before\n-migration.sql" } else { "/tmp/before\n-migration.sql" };
+        let control_character = if cfg!(windows) {
+            "C:/tmp/before\n-migration.sql"
+        } else {
+            "/tmp/before\n-migration.sql"
+        };
         assert!(validate_database_backup_file(control_character, &[]).is_err());
-        let valid = if cfg!(windows) { "C:/tmp/dbx-backup__nightly.SQL" } else { "/tmp/dbx-backup__nightly.SQL" };
+        let valid = if cfg!(windows) {
+            "C:/tmp/dbx-backup__nightly.SQL"
+        } else {
+            "/tmp/dbx-backup__nightly.SQL"
+        };
         assert!(validate_database_backup_file(valid, &[]).is_ok());
-        let valid_gzip =
-            if cfg!(windows) { "C:/tmp/dbx-backup__nightly.SQL.GZ" } else { "/tmp/dbx-backup__nightly.SQL.GZ" };
+        let valid_gzip = if cfg!(windows) {
+            "C:/tmp/dbx-backup__nightly.SQL.GZ"
+        } else {
+            "/tmp/dbx-backup__nightly.SQL.GZ"
+        };
         assert!(validate_database_backup_file(valid_gzip, &[]).is_ok());
     }
 
@@ -231,7 +276,10 @@ mod tests {
 
         let deleted = delete_database_backup_files(
             vec![kept.to_string_lossy().to_string(), gone.to_string_lossy().to_string()],
-            vec![connected.to_string_lossy().to_string(), disconnected.to_string_lossy().to_string()],
+            vec![
+                connected.to_string_lossy().to_string(),
+                disconnected.to_string_lossy().to_string(),
+            ],
         )
         .await
         .unwrap();

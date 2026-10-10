@@ -120,7 +120,10 @@ pub struct PendingUpdateState {
 
 impl PendingUpdateState {
     fn begin_download(&self) -> Result<Arc<DownloadCancellation>, String> {
-        let mut pending = self.pending.lock().map_err(|_| "Update state is unavailable.".to_string())?;
+        let mut pending = self
+            .pending
+            .lock()
+            .map_err(|_| "Update state is unavailable.".to_string())?;
         if pending.is_some() {
             return Err("An update is already downloading or ready to install.".to_string());
         }
@@ -135,7 +138,10 @@ impl PendingUpdateState {
         update: CachedUpdate,
         root: &std::path::Path,
     ) -> Result<(), String> {
-        let mut pending = self.pending.lock().map_err(|_| "Update state is unavailable.".to_string())?;
+        let mut pending = self
+            .pending
+            .lock()
+            .map_err(|_| "Update state is unavailable.".to_string())?;
         let is_current = matches!(
             pending.as_ref(),
             Some(PendingUpdate::Downloading(current))
@@ -154,7 +160,10 @@ impl PendingUpdateState {
     }
 
     fn finish_failed_download(&self, cancellation: &Arc<DownloadCancellation>) -> Result<(), String> {
-        let mut pending = self.pending.lock().map_err(|_| "Update state is unavailable.".to_string())?;
+        let mut pending = self
+            .pending
+            .lock()
+            .map_err(|_| "Update state is unavailable.".to_string())?;
         let is_current = matches!(
             pending.as_ref(),
             Some(PendingUpdate::Downloading(current)) if Arc::ptr_eq(current, cancellation)
@@ -175,7 +184,10 @@ impl PendingUpdateState {
     }
 
     fn take_ready(&self, cache_id: &str, expected_version: &str) -> Result<CachedUpdate, String> {
-        let mut pending = self.pending.lock().map_err(|_| "Update state is unavailable.".to_string())?;
+        let mut pending = self
+            .pending
+            .lock()
+            .map_err(|_| "Update state is unavailable.".to_string())?;
         match pending.take() {
             Some(PendingUpdate::Ready(update))
                 if update.record.info.cache_id == cache_id && update.record.info.version == expected_version =>
@@ -191,7 +203,10 @@ impl PendingUpdateState {
     }
 
     fn restore_ready(&self, update: CachedUpdate) -> Result<(), String> {
-        let mut pending = self.pending.lock().map_err(|_| "Update state is unavailable.".to_string())?;
+        let mut pending = self
+            .pending
+            .lock()
+            .map_err(|_| "Update state is unavailable.".to_string())?;
         *pending = Some(PendingUpdate::Ready(Box::new(update)));
         Ok(())
     }
@@ -209,14 +224,20 @@ impl PendingUpdateState {
     }
 
     fn finish_install(&self) -> Result<(), String> {
-        let mut pending = self.pending.lock().map_err(|_| "Update state is unavailable.".to_string())?;
+        let mut pending = self
+            .pending
+            .lock()
+            .map_err(|_| "Update state is unavailable.".to_string())?;
         *pending = None;
         Ok(())
     }
 }
 
 fn updater_endpoints() -> Vec<String> {
-    OFFICIAL_UPDATE_ENDPOINTS.iter().map(|endpoint| endpoint.to_string()).collect()
+    OFFICIAL_UPDATE_ENDPOINTS
+        .iter()
+        .map(|endpoint| endpoint.to_string())
+        .collect()
 }
 
 fn portable_asset_candidates(latest_version: &str, arch: &str) -> Result<Vec<PortableAssetCandidate>, String> {
@@ -224,11 +245,18 @@ fn portable_asset_candidates(latest_version: &str, arch: &str) -> Result<Vec<Por
     let filename = update_portable::portable_asset_name(normalized_version, arch)?;
     let tag = tag_version(normalized_version);
     let archive_url = format!("{GITHUB_RELEASE_DOWNLOAD_PREFIX}{tag}/{filename}");
-    Ok(vec![PortableAssetCandidate { signature_url: format!("{archive_url}.sig"), archive_url }])
+    Ok(vec![PortableAssetCandidate {
+        signature_url: format!("{archive_url}.sig"),
+        archive_url,
+    }])
 }
 
 fn installer_asset_candidates(download_url: &str, latest_version: Option<&str>) -> Vec<String> {
-    let filename = download_url.rsplit('/').next().filter(|name| !name.is_empty()).unwrap_or("");
+    let filename = download_url
+        .rsplit('/')
+        .next()
+        .filter(|name| !name.is_empty())
+        .unwrap_or("");
 
     let tag = latest_version.map(tag_version).unwrap_or_else(|| {
         if let Some(pos) = download_url.find("/releases/download/") {
@@ -284,7 +312,10 @@ pub async fn fetch_changelog() -> Result<app_core::changelog::ChangelogData, Str
 
 #[tauri::command]
 pub async fn get_system_proxy_url() -> Option<String> {
-    tauri::async_runtime::spawn_blocking(app_core::update::system_proxy_url).await.ok().flatten()
+    tauri::async_runtime::spawn_blocking(app_core::update::system_proxy_url)
+        .await
+        .ok()
+        .flatten()
 }
 
 #[tauri::command]
@@ -296,7 +327,12 @@ fn package_kind(app: &AppHandle) -> Result<String, String> {
     if crate::data_dir::is_portable_mode() {
         return Ok("portable".into());
     }
-    Ok(app.updater_builder().build().map_err(|e| e.to_string())?.package_kind().into())
+    Ok(app
+        .updater_builder()
+        .build()
+        .map_err(|e| e.to_string())?
+        .package_kind()
+        .into())
 }
 
 fn validate_cache_target(record: &CacheRecord, portable_mode: bool, package_kind: &str) -> Result<(), String> {
@@ -317,7 +353,9 @@ fn restore_cached(app: &AppHandle) -> Result<Option<CachedUpdate>, String> {
         return Ok(None);
     }
     let restored = (|| {
-        let Some((record, bytes)) = update_cache::read(&root)? else { return Ok(None) };
+        let Some((record, bytes)) = update_cache::read(&root)? else {
+            return Ok(None);
+        };
         validate_cache_target(&record, crate::data_dir::is_portable_mode(), &package_kind(app)?)?;
         let version =
             update_portable::validate_requested_portable_version(&record.info.version, env!("CARGO_PKG_VERSION"))?;
@@ -328,7 +366,10 @@ fn restore_cached(app: &AppHandle) -> Result<Option<CachedUpdate>, String> {
                 &version,
                 std::env::consts::ARCH,
             )?;
-            ReadyUpdate::Portable { archive: bytes, version }
+            ReadyUpdate::Portable {
+                archive: bytes,
+                version,
+            }
         } else {
             let update = app
                 .updater_builder()
@@ -341,7 +382,10 @@ fn restore_cached(app: &AppHandle) -> Result<Option<CachedUpdate>, String> {
                 return Err("Cached release version mismatch".into());
             }
             update.verify(&bytes).map_err(|e| e.to_string())?;
-            ReadyUpdate::Installer { update: Box::new(update), bytes }
+            ReadyUpdate::Installer {
+                update: Box::new(update),
+                bytes,
+            }
         };
         Ok(Some(CachedUpdate { record, ready }))
     })();
@@ -410,13 +454,29 @@ pub async fn download_update(
         let (ready, manifest, signature, notes) = if portable_mode {
             let (archive, signature) =
                 download_portable_update_inner(&app, &version, &attempt_id, &cancellation).await?;
-            (ReadyUpdate::Portable { archive, version: version.clone() }, None, Some(signature), String::new())
+            (
+                ReadyUpdate::Portable {
+                    archive,
+                    version: version.clone(),
+                },
+                None,
+                Some(signature),
+                String::new(),
+            )
         } else {
             let (update, bytes) =
                 download_update_inner(&app, Some(&latest_version), &attempt_id, &cancellation).await?;
             let manifest = Some(update.raw_json.clone());
             let notes = update.body.clone().unwrap_or_default();
-            (ReadyUpdate::Installer { update: Box::new(update), bytes }, manifest, None, notes)
+            (
+                ReadyUpdate::Installer {
+                    update: Box::new(update),
+                    bytes,
+                },
+                manifest,
+                None,
+                notes,
+            )
         };
         let info = DownloadedUpdate {
             cache_id: uuid::Uuid::new_v4().to_string(),
@@ -467,13 +527,21 @@ async fn download_update_inner(
     println!("[UPDATE] checking from endpoints: {}", endpoint_urls.join(", "));
     let mut endpoints = Vec::with_capacity(endpoint_urls.len());
     for endpoint_url in endpoint_urls {
-        endpoints.push(endpoint_url.parse().map_err(|e| format!("Invalid update endpoint: {e}"))?);
+        endpoints.push(
+            endpoint_url
+                .parse()
+                .map_err(|e| format!("Invalid update endpoint: {e}"))?,
+        );
     }
-    let mut builder =
-        app.updater_builder().endpoints(endpoints).map_err(|e| format!("Failed to configure updater endpoint: {e}"))?;
+    let mut builder = app
+        .updater_builder()
+        .endpoints(endpoints)
+        .map_err(|e| format!("Failed to configure updater endpoint: {e}"))?;
 
     if let Some(proxy_url) = app_core::update::system_proxy_url() {
-        let proxy = proxy_url.parse().map_err(|e| format!("Invalid system proxy URL: {e}"))?;
+        let proxy = proxy_url
+            .parse()
+            .map_err(|e| format!("Invalid system proxy URL: {e}"))?;
         builder = builder.proxy(proxy);
     }
 
@@ -583,7 +651,10 @@ async fn download_update_inner(
         }
     }
 
-    Err(format!("Failed to download update after trying all available mirrors. {}", failures.join("; ")))
+    Err(format!(
+        "Failed to download update after trying all available mirrors. {}",
+        failures.join("; ")
+    ))
 }
 
 async fn download_portable_update_inner(
@@ -642,7 +713,10 @@ async fn download_portable_update_inner(
         }
     }
 
-    Err(format!("Failed to download a verified portable update. {}", failures.join("; ")))
+    Err(format!(
+        "Failed to download a verified portable update. {}",
+        failures.join("; ")
+    ))
 }
 
 fn portable_update_http_client() -> Result<reqwest::Client, String> {
@@ -654,7 +728,9 @@ fn portable_update_http_client() -> Result<reqwest::Client, String> {
         let proxy = reqwest::Proxy::all(&proxy_url).map_err(|error| format!("Invalid system proxy URL: {error}"))?;
         builder = builder.proxy(proxy);
     }
-    builder.build().map_err(|error| format!("Failed to create portable update client: {error}"))
+    builder
+        .build()
+        .map_err(|error| format!("Failed to create portable update client: {error}"))
 }
 
 async fn download_bounded_bytes(
@@ -692,7 +768,12 @@ async fn download_bounded_bytes(
     if let Some(app) = progress_app {
         let _ = app.emit(
             UPDATE_DOWNLOAD_PROGRESS_EVENT,
-            UpdateDownloadProgress { downloaded: 0, total, attempt_id: attempt_id.into(), version: version.into() },
+            UpdateDownloadProgress {
+                downloaded: 0,
+                total,
+                attempt_id: attempt_id.into(),
+                version: version.into(),
+            },
         );
     }
     let mut progress_gate = UpdateDownloadProgressGate::default();
@@ -805,9 +886,9 @@ pub fn install_downloaded_update(
     let ready = &refreshed.ready;
     let portable = matches!(ready, ReadyUpdate::Portable { .. });
     let install_result = match ready {
-        ReadyUpdate::Installer { update, bytes } => {
-            update.install(bytes).map_err(|error| format!("Failed to install update: {error}"))
-        }
+        ReadyUpdate::Installer { update, bytes } => update
+            .install(bytes)
+            .map_err(|error| format!("Failed to install update: {error}")),
         ReadyUpdate::Portable { archive, version } => {
             update_portable::ensure_portable_version_is_newer(version, env!("CARGO_PKG_VERSION"))
                 .and_then(|_| update_portable::launch_portable_update_helper(archive, version))
@@ -841,10 +922,9 @@ fn schedule_portable_update_exit(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        installer_asset_candidates, portable_asset_candidates, requires_manual_update, tag_version,
-        updater_endpoints, wait_for_download_step, wait_for_progressing_download, DownloadCancellation,
-        PendingUpdateState, UpdateDownloadProgressGate, DOWNLOAD_CANCELED_ERROR, GITHUB_RELEASE_DOWNLOAD_PREFIX,
-        OFFICIAL_UPDATE_ENDPOINTS,
+        installer_asset_candidates, portable_asset_candidates, requires_manual_update, tag_version, updater_endpoints,
+        wait_for_download_step, wait_for_progressing_download, DownloadCancellation, PendingUpdateState,
+        UpdateDownloadProgressGate, DOWNLOAD_CANCELED_ERROR, GITHUB_RELEASE_DOWNLOAD_PREFIX, OFFICIAL_UPDATE_ENDPOINTS,
     };
     use std::{future::pending, sync::Arc, time::Duration};
 
@@ -868,7 +948,10 @@ mod tests {
                 manifest: None,
                 signature: None,
             },
-            ready: super::ReadyUpdate::Portable { archive: vec![], version: semver::Version::new(99, 0, 0) },
+            ready: super::ReadyUpdate::Portable {
+                archive: vec![],
+                version: semver::Version::new(99, 0, 0),
+            },
         }
     }
 
@@ -937,7 +1020,13 @@ mod tests {
     #[test]
     fn builds_update_endpoints_from_github() {
         let endpoints = updater_endpoints();
-        assert_eq!(endpoints, OFFICIAL_UPDATE_ENDPOINTS.iter().map(|endpoint| endpoint.to_string()).collect::<Vec<_>>());
+        assert_eq!(
+            endpoints,
+            OFFICIAL_UPDATE_ENDPOINTS
+                .iter()
+                .map(|endpoint| endpoint.to_string())
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -948,7 +1037,10 @@ mod tests {
             candidates[0].archive_url,
             format!("{GITHUB_RELEASE_DOWNLOAD_PREFIX}v0.5.64/MyApp_0.5.64_x64-portable.zip")
         );
-        assert_eq!(candidates[0].signature_url, format!("{}.sig", candidates[0].archive_url));
+        assert_eq!(
+            candidates[0].signature_url,
+            format!("{}.sig", candidates[0].archive_url)
+        );
     }
 
     #[test]
@@ -1058,7 +1150,10 @@ mod tests {
         tokio::task::yield_now().await;
         cancellation.cancel();
 
-        let result = tokio::time::timeout(Duration::from_secs(1), task).await.unwrap().unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(1), task)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(result.unwrap_err(), DOWNLOAD_CANCELED_ERROR);
     }
 
@@ -1079,7 +1174,10 @@ mod tests {
         tokio::task::yield_now().await;
         cancellation.cancel();
 
-        let result = tokio::time::timeout(Duration::from_secs(1), task).await.unwrap().unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(1), task)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(result.unwrap_err(), DOWNLOAD_CANCELED_ERROR);
     }
 }

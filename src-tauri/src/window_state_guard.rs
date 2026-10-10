@@ -47,7 +47,12 @@ fn enforce_window_bounds<R: Runtime>(window: &WebviewWindow<R>) -> bool {
         return false;
     }
 
-    let monitor = match window.current_monitor().ok().flatten().or_else(|| window.primary_monitor().ok().flatten()) {
+    let monitor = match window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten())
+    {
         Some(monitor) => monitor,
         None => return false,
     };
@@ -112,18 +117,46 @@ mod tests {
     #[test]
     fn moves_window_back_onto_monitor_when_restored_above_screen() {
         let corrected = corrected_window_rect(
-            PhysicalWindowRect { x: 118, y: -1042, width: 1512, height: 866 },
-            PhysicalMonitorRect { x: 0, y: 0, width: 1512, height: 982 },
+            PhysicalWindowRect {
+                x: 118,
+                y: -1042,
+                width: 1512,
+                height: 866,
+            },
+            PhysicalMonitorRect {
+                x: 0,
+                y: 0,
+                width: 1512,
+                height: 982,
+            },
         );
 
-        assert_eq!(corrected, Some(PhysicalWindowRect { x: 0, y: 58, width: 1512, height: 866 }));
+        assert_eq!(
+            corrected,
+            Some(PhysicalWindowRect {
+                x: 0,
+                y: 58,
+                width: 1512,
+                height: 866
+            })
+        );
     }
 
     #[test]
     fn leaves_window_unchanged_when_it_fits_monitor() {
         let corrected = corrected_window_rect(
-            PhysicalWindowRect { x: 80, y: 60, width: 1280, height: 800 },
-            PhysicalMonitorRect { x: 0, y: 0, width: 1512, height: 982 },
+            PhysicalWindowRect {
+                x: 80,
+                y: 60,
+                width: 1280,
+                height: 800,
+            },
+            PhysicalMonitorRect {
+                x: 0,
+                y: 0,
+                width: 1512,
+                height: 982,
+            },
         );
 
         assert_eq!(corrected, None);
@@ -132,10 +165,28 @@ mod tests {
     #[test]
     fn shrinks_window_that_is_larger_than_monitor() {
         let corrected = corrected_window_rect(
-            PhysicalWindowRect { x: -200, y: -120, width: 4096, height: 2160 },
-            PhysicalMonitorRect { x: 0, y: 0, width: 1440, height: 900 },
+            PhysicalWindowRect {
+                x: -200,
+                y: -120,
+                width: 4096,
+                height: 2160,
+            },
+            PhysicalMonitorRect {
+                x: 0,
+                y: 0,
+                width: 1440,
+                height: 900,
+            },
         );
 
-        assert_eq!(corrected, Some(PhysicalWindowRect { x: 0, y: 0, width: 1440, height: 900 }));
+        assert_eq!(
+            corrected,
+            Some(PhysicalWindowRect {
+                x: 0,
+                y: 0,
+                width: 1440,
+                height: 900
+            })
+        );
     }
 }

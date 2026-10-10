@@ -52,7 +52,10 @@ pub async fn fetch_latest_release() -> Result<TauriRelease, String> {
         .and_then(|response| response.error_for_status())
         .map_err(|error| format!("Failed to check updates: {error}"))?;
 
-    let mut release = resp.json::<TauriRelease>().await.map_err(|e| format!("Failed to parse update response: {e}"))?;
+    let mut release = resp
+        .json::<TauriRelease>()
+        .await
+        .map_err(|e| format!("Failed to parse update response: {e}"))?;
     if let Ok(github) = fetch_github_release_metadata(&client, &release.version).await {
         release.github = Some(github);
     }
@@ -60,15 +63,18 @@ pub async fn fetch_latest_release() -> Result<TauriRelease, String> {
 }
 
 fn build_update_http_client() -> Result<reqwest::Client, String> {
-    let mut builder =
-        reqwest::Client::builder().timeout(std::time::Duration::from_secs(10)).user_agent("myapp-update-checker");
+    let mut builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .user_agent("myapp-update-checker");
 
     if let Some(proxy_url) = system_proxy_url() {
         let proxy = reqwest::Proxy::all(&proxy_url).map_err(|e| format!("Invalid system proxy URL: {e}"))?;
         builder = builder.proxy(proxy);
     }
 
-    builder.build().map_err(|e| format!("Failed to create HTTP client: {e}"))
+    builder
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {e}"))
 }
 
 pub use app_platform::proxy::system_proxy_url;
@@ -94,7 +100,11 @@ pub fn build_update_info(release: TauriRelease, current_version: &str) -> Update
     let latest_version = normalize_version(&release.version);
     let github = release.github.as_ref();
     let release_notes = canonical_release_notes(release.notes.as_deref())
-        .or_else(|| github.and_then(|metadata| non_empty(metadata.body.as_deref())).map(ToOwned::to_owned))
+        .or_else(|| {
+            github
+                .and_then(|metadata| non_empty(metadata.body.as_deref()))
+                .map(ToOwned::to_owned)
+        })
         .unwrap_or_default();
     let release_name = github
         .and_then(|metadata| non_empty(metadata.name.as_deref()))
@@ -156,7 +166,10 @@ mod tests {
         let info = build_update_info(release, "0.1.2");
 
         assert_eq!(info.release_name, "MyApp v0.1.3");
-        assert_eq!(info.release_url, "https://github.com/liuzheng110/yy_desk/releases/tag/v0.1.3");
+        assert_eq!(
+            info.release_url,
+            "https://github.com/liuzheng110/yy_desk/releases/tag/v0.1.3"
+        );
         assert_eq!(info.release_notes, "### 新功能\n\n真实发布说明");
         assert!(!info.portable_mode);
     }
@@ -171,7 +184,10 @@ mod tests {
 
         let info = build_update_info(release, "0.1.2");
 
-        assert_eq!(info.release_url, "https://github.com/liuzheng110/yy_desk/releases/tag/v0.1.3");
+        assert_eq!(
+            info.release_url,
+            "https://github.com/liuzheng110/yy_desk/releases/tag/v0.1.3"
+        );
         assert_eq!(info.release_notes, "### 新功能\n\n真实发布说明");
     }
 

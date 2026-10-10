@@ -30,7 +30,12 @@ pub(crate) fn format_support_info_for_native_about() -> String {
     let info = current_app_support_info();
     let operating_system = format_operating_system(&info);
 
-    ["Desktop".to_string(), unknown_if_empty(&operating_system), unknown_if_empty(&info.arch)].join(" • ")
+    [
+        "Desktop".to_string(),
+        unknown_if_empty(&operating_system),
+        unknown_if_empty(&info.arch),
+    ]
+    .join(" • ")
 }
 
 #[cfg(any(target_os = "macos", test))]
@@ -114,7 +119,9 @@ fn extract_windows_version(line: &str) -> Option<String> {
     line.split(|ch: char| !ch.is_ascii_digit() && ch != '.')
         .filter(|token| {
             token.contains('.')
-                && token.split('.').all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+                && token
+                    .split('.')
+                    .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
         })
         .max_by_key(|token| token.len())
         .map(ToOwned::to_owned)
@@ -148,7 +155,11 @@ fn command_first_line(command: &str, args: &[&str]) -> Option<String> {
     if !output.status.success() {
         return None;
     }
-    String::from_utf8_lossy(&output.stdout).lines().map(str::trim).find(|line| !line.is_empty()).map(ToOwned::to_owned)
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(ToOwned::to_owned)
 }
 
 #[cfg(target_os = "linux")]
@@ -233,7 +244,10 @@ VERSION_ID="24.04"
 PRETTY_NAME="Ubuntu 24.04.1 LTS"
 "#;
 
-        assert_eq!(parse_os_release_value(content, "PRETTY_NAME").as_deref(), Some("Ubuntu 24.04.1 LTS"));
+        assert_eq!(
+            parse_os_release_value(content, "PRETTY_NAME").as_deref(),
+            Some("Ubuntu 24.04.1 LTS")
+        );
         assert_eq!(parse_os_release_value(content, "VERSION_ID").as_deref(), Some("24.04"));
     }
 
@@ -274,7 +288,10 @@ PRETTY_NAME="Ubuntu 24.04.1 LTS"
 
     #[test]
     fn picks_longest_windows_version_candidate() {
-        assert_eq!(extract_windows_version("cmd 1.0 build 10.0.26200.8655").as_deref(), Some("10.0.26200.8655"));
+        assert_eq!(
+            extract_windows_version("cmd 1.0 build 10.0.26200.8655").as_deref(),
+            Some("10.0.26200.8655")
+        );
     }
 
     #[test]
@@ -300,6 +317,9 @@ PRETTY_NAME="Ubuntu 24.04.1 LTS"
 
     #[test]
     fn unquotes_linux_os_release_escapes() {
-        assert_eq!(unquote_os_release_value(r#""A \"quoted\" value""#), "A \"quoted\" value");
+        assert_eq!(
+            unquote_os_release_value(r#""A \"quoted\" value""#),
+            "A \"quoted\" value"
+        );
     }
 }

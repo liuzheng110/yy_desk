@@ -71,7 +71,9 @@ pub struct AppAutoStartConfig {
     pub startup_timeout_ms: u64,
 }
 
-fn default_app_startup_timeout() -> u64 { 20_000 }
+fn default_app_startup_timeout() -> u64 {
+    20_000
+}
 
 fn default_true() -> bool {
     true
@@ -176,8 +178,7 @@ pub fn load_config(path: &Path) -> anyhow::Result<McpRegistryConfig> {
         return Ok(McpRegistryConfig::default());
     }
     let text = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-    let cfg: McpRegistryConfig =
-        serde_json::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
+    let cfg: McpRegistryConfig = serde_json::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
     Ok(cfg)
 }
 
@@ -186,8 +187,7 @@ pub fn load_cache(path: &Path) -> anyhow::Result<McpToolsCache> {
         return Ok(McpToolsCache::default());
     }
     let text = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-    let cache: McpToolsCache =
-        serde_json::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
+    let cache: McpToolsCache = serde_json::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
     Ok(cache)
 }
 

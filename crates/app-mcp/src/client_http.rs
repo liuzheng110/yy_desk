@@ -20,12 +20,7 @@ pub struct HttpMcpClient {
 impl HttpMcpClient {
     pub async fn connect(cfg: &McpServerConfig) -> anyhow::Result<Self> {
         let url = cfg.url.clone().context("http MCP missing `url`")?;
-        let headers = cfg
-            .headers
-            .clone()
-            .unwrap_or_default()
-            .into_iter()
-            .collect::<Vec<_>>();
+        let headers = cfg.headers.clone().unwrap_or_default().into_iter().collect::<Vec<_>>();
         let client = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(120))
@@ -66,7 +61,11 @@ impl HttpMcpClient {
             req = req.header("Mcp-Session-Id", sid);
         }
 
-        let resp = req.json(&body).send().await.with_context(|| format!("POST {}", self.url))?;
+        let resp = req
+            .json(&body)
+            .send()
+            .await
+            .with_context(|| format!("POST {}", self.url))?;
         if let Some(sid) = resp.headers().get("mcp-session-id") {
             self.session_id = Some(sid.to_str()?.to_string());
         }
@@ -78,7 +77,10 @@ impl HttpMcpClient {
             return Ok(Value::Null);
         }
         if !status.is_success() {
-            bail!("HTTP MCP `{method}` status {status}: {}", text.chars().take(200).collect::<String>());
+            bail!(
+                "HTTP MCP `{method}` status {status}: {}",
+                text.chars().take(200).collect::<String>()
+            );
         }
         let v = parse_maybe_sse(&text);
         if let Some(err) = v.get("error").and_then(Value::as_object) {
@@ -109,9 +111,12 @@ impl HttpMcpClient {
     }
 
     pub async fn list_tools(&mut self) -> anyhow::Result<Vec<ToolDefinition>> {
-        let res = timeout(Duration::from_millis(self.timeout_ms), self.post("tools/list", json!({}), true))
-            .await
-            .context("http MCP tools/list timed out")??;
+        let res = timeout(
+            Duration::from_millis(self.timeout_ms),
+            self.post("tools/list", json!({}), true),
+        )
+        .await
+        .context("http MCP tools/list timed out")??;
         let tools = res
             .get("tools")
             .and_then(Value::as_array)

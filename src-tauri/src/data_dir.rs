@@ -35,7 +35,9 @@ impl DataDirResolution {
 }
 
 pub fn resolve_data_dir_with_mode(default_app_data_dir: PathBuf) -> DataDirResolution {
-    let env_data_dir = std::env::var_os("MYAPP_DATA_DIR").filter(|value| !value.is_empty()).map(PathBuf::from);
+    let env_data_dir = std::env::var_os("MYAPP_DATA_DIR")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from);
 
     #[cfg(target_os = "windows")]
     let exe_dir = current_exe_dir();
@@ -68,7 +70,9 @@ pub fn is_portable_mode() -> bool {
 
 #[cfg(target_os = "windows")]
 fn current_exe_dir() -> Option<PathBuf> {
-    std::env::current_exe().ok().and_then(|path| path.parent().map(Path::to_path_buf))
+    std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf))
 }
 
 #[cfg(target_os = "windows")]
@@ -98,7 +102,10 @@ fn resolve_data_dir_from_inputs(
     installer_marker_exists: bool,
     env_data_dir: Option<PathBuf>,
 ) -> DataDirResolution {
-    let portable_data_dir = exe_dir.as_ref().filter(|_| portable_marker_exists).map(|dir| dir.join("data"));
+    let portable_data_dir = exe_dir
+        .as_ref()
+        .filter(|_| portable_marker_exists)
+        .map(|dir| dir.join("data"));
 
     if let Some(env_dir) = env_data_dir {
         return DataDirResolution {
@@ -202,8 +209,13 @@ mod tests {
         let default_dir = PathBuf::from(r"C:\Users\Administrator\AppData\Roaming\com.myapp.app");
         let exe_dir = PathBuf::from(r"D:\Apps\MyApp");
 
-        let resolution =
-            resolve_data_dir_from_inputs(default_dir, Some(exe_dir), true, false, Some(PathBuf::from(r"E:\MyAppData")));
+        let resolution = resolve_data_dir_from_inputs(
+            default_dir,
+            Some(exe_dir),
+            true,
+            false,
+            Some(PathBuf::from(r"E:\MyAppData")),
+        );
 
         assert_eq!(alternative_data_dir(&resolution), None);
     }

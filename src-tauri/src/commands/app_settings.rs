@@ -34,7 +34,10 @@ fn approved_detached_closes() -> &'static Mutex<HashSet<String>> {
 }
 
 pub(crate) fn take_approved_detached_window_close(label: &str) -> bool {
-    approved_detached_closes().lock().map(|mut labels| labels.remove(label)).unwrap_or(false)
+    approved_detached_closes()
+        .lock()
+        .map(|mut labels| labels.remove(label))
+        .unwrap_or(false)
 }
 
 async fn load_detached_tabs_map(state: &AppState) -> Result<serde_json::Map<String, serde_json::Value>, String> {
@@ -126,10 +129,13 @@ pub async fn complete_app_close(app: AppHandle, window: Window, action: String) 
 
 #[tauri::command]
 pub fn mark_frontend_ready(app: AppHandle) -> Result<(), String> {
-    let state =
-        app.try_state::<CloseBehaviorState>().ok_or_else(|| "close behavior state is unavailable".to_string())?;
+    let state = app
+        .try_state::<CloseBehaviorState>()
+        .ok_or_else(|| "close behavior state is unavailable".to_string())?;
     state.set_frontend_ready(true);
-    let main_window_visible = app.get_webview_window("main").is_some_and(|window| window.is_visible().unwrap_or(false));
+    let main_window_visible = app
+        .get_webview_window("main")
+        .is_some_and(|window| window.is_visible().unwrap_or(false));
     clear_startup_probe_after_frontend_ready(main_window_visible);
     Ok(())
 }
@@ -156,12 +162,18 @@ pub async fn save_editor_settings(state: State<'_, Arc<AppState>>, settings: ser
 
 #[tauri::command]
 pub async fn load_open_tabs_state(state: State<'_, Arc<AppState>>) -> Result<Option<serde_json::Value>, String> {
-    state.storage.load_open_tabs_state_with_key(open_tabs_state_key(cfg!(debug_assertions))).await
+    state
+        .storage
+        .load_open_tabs_state_with_key(open_tabs_state_key(cfg!(debug_assertions)))
+        .await
 }
 
 #[tauri::command]
 pub async fn save_open_tabs_state(state: State<'_, Arc<AppState>>, payload: serde_json::Value) -> Result<(), String> {
-    state.storage.save_open_tabs_state_with_key(open_tabs_state_key(cfg!(debug_assertions)), &payload).await
+    state
+        .storage
+        .save_open_tabs_state_with_key(open_tabs_state_key(cfg!(debug_assertions)), &payload)
+        .await
 }
 
 #[tauri::command]
@@ -173,7 +185,10 @@ pub async fn save_detached_tab_handoff(
     let _guard = detached_tabs_lock().lock().await;
     let mut tabs = load_detached_tabs_map(state.inner()).await?;
     tabs.insert(tab_id, handoff);
-    state.storage.save_open_tabs_state_with_key(DETACHED_TABS_STATE_KEY, &serde_json::Value::Object(tabs)).await
+    state
+        .storage
+        .save_open_tabs_state_with_key(DETACHED_TABS_STATE_KEY, &serde_json::Value::Object(tabs))
+        .await
 }
 
 #[tauri::command]
@@ -196,7 +211,10 @@ pub async fn delete_detached_tab_handoff(state: State<'_, Arc<AppState>>, tab_id
     let _guard = detached_tabs_lock().lock().await;
     let mut tabs = load_detached_tabs_map(state.inner()).await?;
     tabs.remove(&tab_id);
-    state.storage.save_open_tabs_state_with_key(DETACHED_TABS_STATE_KEY, &serde_json::Value::Object(tabs)).await
+    state
+        .storage
+        .save_open_tabs_state_with_key(DETACHED_TABS_STATE_KEY, &serde_json::Value::Object(tabs))
+        .await
 }
 
 #[tauri::command]
@@ -249,7 +267,11 @@ fn load_native_debug_logs_from_dir(log_dir: PathBuf) -> Result<String, String> {
         let name = path.file_name().and_then(|name| name.to_str()).unwrap_or("unknown");
         output.push_str(&format!("\n===== {name} =====\n"));
         let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-        let start = if len > MAX_FILE_BYTES { bytes.len().saturating_sub(MAX_FILE_BYTES as usize) } else { 0 };
+        let start = if len > MAX_FILE_BYTES {
+            bytes.len().saturating_sub(MAX_FILE_BYTES as usize)
+        } else {
+            0
+        };
         if start > 0 {
             output.push_str("[truncated to last 512 KiB]\n");
         }

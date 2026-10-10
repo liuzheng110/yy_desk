@@ -90,7 +90,9 @@ async fn gateway_aggregates_and_routes_live() {
             }
         ]
     });
-    tokio::fs::write(&cfg_path, cfg.to_string()).await.expect("write config");
+    tokio::fs::write(&cfg_path, cfg.to_string())
+        .await
+        .expect("write config");
 
     // --- load gateway, refresh tool cache while both mocks are online ---
     let gateway = GatewayHandle::load(&cfg_path, &cache_path).expect("load gateway");
@@ -109,7 +111,11 @@ async fn gateway_aggregates_and_routes_live() {
     let client = reqwest::Client::new();
 
     // --- Codex-style handshake ---
-    let init = post(&client, json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})).await;
+    let init = post(
+        &client,
+        json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}),
+    )
+    .await;
     assert_eq!(init["result"]["serverInfo"]["name"], "myapp-gateway");
     assert_eq!(init["result"]["protocolVersion"], "2025-06-18");
 
@@ -126,15 +132,25 @@ async fn gateway_aggregates_and_routes_live() {
     assert!(initialized.bytes().await.expect("notification body").is_empty());
 
     // --- tools/list: both servers' tools present (from cache) ---
-    let list = post(&client, json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}})).await;
+    let list = post(
+        &client,
+        json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}),
+    )
+    .await;
     let names: Vec<String> = list["result"]["tools"]
         .as_array()
         .expect("tools array")
         .iter()
         .map(|t| t["name"].as_str().unwrap_or("").to_string())
         .collect();
-    assert!(names.contains(&"stdiomock__echo".to_string()), "stdio tool listed: {names:?}");
-    assert!(names.contains(&"httpmock__add".to_string()), "http tool listed: {names:?}");
+    assert!(
+        names.contains(&"stdiomock__echo".to_string()),
+        "stdio tool listed: {names:?}"
+    );
+    assert!(
+        names.contains(&"httpmock__add".to_string()),
+        "http tool listed: {names:?}"
+    );
 
     // --- live call to stdio tool ---
     let call1 = post(
@@ -142,7 +158,9 @@ async fn gateway_aggregates_and_routes_live() {
         json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"stdiomock__echo","arguments":{"text":"hi there"}}}),
     )
     .await;
-    let text1 = call1["result"]["content"][0]["text"].as_str().expect("call result text");
+    let text1 = call1["result"]["content"][0]["text"]
+        .as_str()
+        .expect("call result text");
     assert_eq!(text1, "echo:hi there");
 
     // --- live call to http tool ---
@@ -151,7 +169,9 @@ async fn gateway_aggregates_and_routes_live() {
         json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"httpmock__add","arguments":{"a":1,"b":2}}}),
     )
     .await;
-    let text2 = call2["result"]["content"][0]["text"].as_str().expect("call result text");
+    let text2 = call2["result"]["content"][0]["text"]
+        .as_str()
+        .expect("call result text");
     assert_eq!(text2, "3");
 
     // --- OFFLINE: kill the http mock. Tools must STILL be listed (cache);
@@ -160,14 +180,21 @@ async fn gateway_aggregates_and_routes_live() {
     let _ = http_mock.wait();
     sleep(Duration::from_millis(300)).await;
 
-    let list2 = post(&client, json!({"jsonrpc":"2.0","id":5,"method":"tools/list","params":{}})).await;
+    let list2 = post(
+        &client,
+        json!({"jsonrpc":"2.0","id":5,"method":"tools/list","params":{}}),
+    )
+    .await;
     let names2: Vec<String> = list2["result"]["tools"]
         .as_array()
         .expect("tools array")
         .iter()
         .map(|t| t["name"].as_str().unwrap_or("").to_string())
         .collect();
-    assert!(names2.contains(&"httpmock__add".to_string()), "tool stays discoverable offline: {names2:?}");
+    assert!(
+        names2.contains(&"httpmock__add".to_string()),
+        "tool stays discoverable offline: {names2:?}"
+    );
 
     let call3 = post(
         &client,
@@ -188,7 +215,9 @@ async fn gateway_aggregates_and_routes_live() {
         json!({"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"httpmock__add","arguments":{"a":10,"b":32}}}),
     )
     .await;
-    let text4 = call4["result"]["content"][0]["text"].as_str().expect("call result text");
+    let text4 = call4["result"]["content"][0]["text"]
+        .as_str()
+        .expect("call result text");
     assert_eq!(text4, "42");
 
     http_mock2.kill().expect("kill second http mock");
@@ -213,7 +242,9 @@ async fn proxy_stdio_forwards_requests() {
             {"name": "stdiomock", "enabled": true, "transport": "stdio", "command": "python", "args": [stdio_script]}
         ]
     });
-    tokio::fs::write(&cfg_path, cfg.to_string()).await.expect("write config");
+    tokio::fs::write(&cfg_path, cfg.to_string())
+        .await
+        .expect("write config");
 
     let gateway = GatewayHandle::load(&cfg_path, &cache_path).expect("load gateway");
     gateway.refresh_tools().await;
@@ -226,7 +257,11 @@ async fn proxy_stdio_forwards_requests() {
     // covered by the real binary; here we exercise the same forwarding path
     // by POSTing directly (protocol-level behavior identical).
     let client = reqwest::Client::new();
-    let list = post(&client, json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}})).await;
+    let list = post(
+        &client,
+        json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}),
+    )
+    .await;
     let names: Vec<String> = list["result"]["tools"]
         .as_array()
         .unwrap_or(&Vec::new())
@@ -270,18 +305,27 @@ async fn meta_mode_exposes_gateway_surface() {
             {"name": "httpmock", "enabled": true, "transport": "http", "url": format!("http://127.0.0.1:{MOCK_PORT}/mcp")}
         ]
     });
-    tokio::fs::write(&cfg_path, cfg.to_string()).await.expect("write config");
+    tokio::fs::write(&cfg_path, cfg.to_string())
+        .await
+        .expect("write config");
 
     let gateway = GatewayHandle::load(&cfg_path, &cache_path).expect("load gateway");
     assert!(gateway.meta_mode().await, "meta mode enabled");
     gateway.refresh_tools().await;
 
-    let server = spawn_server(Arc::new(gateway.clone()), PORT).await.expect("spawn server");
+    let server = spawn_server(Arc::new(gateway.clone()), PORT)
+        .await
+        .expect("spawn server");
     wait_port(PORT, 10).await;
     let client = reqwest::Client::new();
 
     // tools/list -> only gateway_* meta tools, no full catalog
-    let list = post_at(&client, PORT, json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}})).await;
+    let list = post_at(
+        &client,
+        PORT,
+        json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}),
+    )
+    .await;
     let names: Vec<String> = list["result"]["tools"]
         .as_array()
         .expect("tools array")
@@ -290,7 +334,10 @@ async fn meta_mode_exposes_gateway_surface() {
         .collect();
     assert!(names.contains(&"gateway_search_tools".to_string()), "{names:?}");
     assert!(names.contains(&"gateway_invoke".to_string()), "{names:?}");
-    assert!(!names.contains(&"httpmock__add".to_string()), "full catalog hidden in meta mode: {names:?}");
+    assert!(
+        !names.contains(&"httpmock__add".to_string()),
+        "full catalog hidden in meta mode: {names:?}"
+    );
 
     // gateway_search_tools finds the backend tool via cache
     let search = post_at(
@@ -300,7 +347,10 @@ async fn meta_mode_exposes_gateway_surface() {
     )
     .await;
     let search_text = search["result"]["content"][0]["text"].as_str().expect("search text");
-    assert!(search_text.contains("httpmock__add"), "search finds backend tool: {search_text}");
+    assert!(
+        search_text.contains("httpmock__add"),
+        "search finds backend tool: {search_text}"
+    );
 
     // gateway_invoke routes through to the live backend
     let invoke = post_at(
@@ -348,45 +398,84 @@ async fn scope_restricts_tool_catalog_and_calls() {
             {"name": "httpmock", "enabled": true, "transport": "http", "url": format!("http://127.0.0.1:{MOCK_PORT}/mcp")}
         ]
     });
-    tokio::fs::write(&cfg_path, cfg.to_string()).await.expect("write config");
+    tokio::fs::write(&cfg_path, cfg.to_string())
+        .await
+        .expect("write config");
 
     let gateway = GatewayHandle::load(&cfg_path, &cache_path).expect("load gateway");
     gateway.refresh_tools().await;
-    let server = spawn_server(Arc::new(gateway.clone()), PORT).await.expect("spawn server");
+    let server = spawn_server(Arc::new(gateway.clone()), PORT)
+        .await
+        .expect("spawn server");
     wait_port(PORT, 10).await;
     let client = reqwest::Client::new();
 
     // unscoped: both servers visible
-    let full = post_at(&client, PORT, json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}})).await;
-    let full_names: Vec<String> = full["result"]["tools"].as_array().unwrap().iter()
-        .map(|t| t["name"].as_str().unwrap_or("").to_string()).collect();
+    let full = post_at(
+        &client,
+        PORT,
+        json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}),
+    )
+    .await;
+    let full_names: Vec<String> = full["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap_or("").to_string())
+        .collect();
     assert!(full_names.contains(&"stdiomock__echo".to_string()));
     assert!(full_names.contains(&"httpmock__add".to_string()));
 
     // scoped to stdiomock: only its own tool
-    let scoped = client.post(format!("http://127.0.0.1:{PORT}/mcp?scope=stdiomock"))
+    let scoped = client
+        .post(format!("http://127.0.0.1:{PORT}/mcp?scope=stdiomock"))
         .json(&json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}))
-        .send().await.expect("post scoped list");
+        .send()
+        .await
+        .expect("post scoped list");
     let scoped_json: Value = scoped.json().await.expect("parse scoped list");
-    let scoped_names: Vec<String> = scoped_json["result"]["tools"].as_array().unwrap().iter()
-        .map(|t| t["name"].as_str().unwrap_or("").to_string()).collect();
-    assert!(scoped_names.contains(&"stdiomock__echo".to_string()), "{scoped_names:?}");
-    assert!(!scoped_names.contains(&"httpmock__add".to_string()), "foreign tool hidden: {scoped_names:?}");
+    let scoped_names: Vec<String> = scoped_json["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap_or("").to_string())
+        .collect();
+    assert!(
+        scoped_names.contains(&"stdiomock__echo".to_string()),
+        "{scoped_names:?}"
+    );
+    assert!(
+        !scoped_names.contains(&"httpmock__add".to_string()),
+        "foreign tool hidden: {scoped_names:?}"
+    );
 
     // scoped to httpmock
-    let scoped2 = client.post(format!("http://127.0.0.1:{PORT}/mcp?scope=httpmock"))
+    let scoped2 = client
+        .post(format!("http://127.0.0.1:{PORT}/mcp?scope=httpmock"))
         .json(&json!({"jsonrpc":"2.0","id":3,"method":"tools/list","params":{}}))
-        .send().await.expect("post scoped list 2");
+        .send()
+        .await
+        .expect("post scoped list 2");
     let scoped2_json: Value = scoped2.json().await.expect("parse scoped list 2");
-    let scoped2_names: Vec<String> = scoped2_json["result"]["tools"].as_array().unwrap().iter()
-        .map(|t| t["name"].as_str().unwrap_or("").to_string()).collect();
-    assert!(scoped2_names.contains(&"httpmock__add".to_string()), "{scoped2_names:?}");
+    let scoped2_names: Vec<String> = scoped2_json["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap_or("").to_string())
+        .collect();
+    assert!(
+        scoped2_names.contains(&"httpmock__add".to_string()),
+        "{scoped2_names:?}"
+    );
     assert!(!scoped2_names.contains(&"stdiomock__echo".to_string()));
 
     // unknown scope -> empty list (no error)
-    let scoped3 = client.post(format!("http://127.0.0.1:{PORT}/mcp?scope=nosuch"))
+    let scoped3 = client
+        .post(format!("http://127.0.0.1:{PORT}/mcp?scope=nosuch"))
         .json(&json!({"jsonrpc":"2.0","id":4,"method":"tools/list","params":{}}))
-        .send().await.expect("post scoped list 3");
+        .send()
+        .await
+        .expect("post scoped list 3");
     let scoped3_json: Value = scoped3.json().await.expect("parse scoped list 3");
     assert_eq!(scoped3_json["result"]["tools"].as_array().unwrap().len(), 0);
 
@@ -401,8 +490,17 @@ async fn scope_restricts_tool_catalog_and_calls() {
         .json(&json!({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"httpmock__add","arguments":{"a":1,"b":2}}}))
         .send().await.expect("post out-of-scope call");
     let bad_json: Value = bad_call.json().await.expect("parse out-of-scope call");
-    assert!(bad_json["error"].is_object(), "foreign tool rejected with error: {bad_json:?}");
-    assert!(bad_json["error"]["message"].as_str().unwrap_or("").contains("not part of scope"), "{bad_json:?}");
+    assert!(
+        bad_json["error"].is_object(),
+        "foreign tool rejected with error: {bad_json:?}"
+    );
+    assert!(
+        bad_json["error"]["message"]
+            .as_str()
+            .unwrap_or("")
+            .contains("not part of scope"),
+        "{bad_json:?}"
+    );
 
     http_mock.kill().expect("kill http mock");
     let _ = http_mock.wait();
@@ -435,7 +533,9 @@ async fn circuit_breaker_opens_after_failures() {
             {"name": "flakey", "enabled": true, "transport": "http", "url": format!("http://127.0.0.1:{MOCK_PORT}/mcp")}
         ]
     });
-    tokio::fs::write(&cfg_path, cfg.to_string()).await.expect("write config");
+    tokio::fs::write(&cfg_path, cfg.to_string())
+        .await
+        .expect("write config");
 
     let gateway = GatewayHandle::load(&cfg_path, &cache_path).expect("load gateway");
     gateway.refresh_tools().await;
@@ -451,8 +551,16 @@ async fn circuit_breaker_opens_after_failures() {
     assert!(err2.is_err(), "second offline call fails (trips breaker)");
 
     let status = gateway.server_status().await;
-    let flakey = status["servers"].as_array().unwrap().iter().find(|s| s["name"] == "flakey").expect("flakey entry");
-    assert_eq!(flakey["status"], "circuitOpen", "breaker open after threshold: {status}");
+    let flakey = status["servers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["name"] == "flakey")
+        .expect("flakey entry");
+    assert_eq!(
+        flakey["status"], "circuitOpen",
+        "breaker open after threshold: {status}"
+    );
     assert_eq!(flakey["consecutiveFailures"], 2);
 
     // next call fails FAST with the circuit-open message, not a 60s timeout
@@ -472,7 +580,12 @@ async fn circuit_breaker_opens_after_failures() {
     let ok = gateway.call_tool("flakey__add", json!({"a":40,"b":2})).await;
     assert!(ok.is_ok(), "call succeeds after revive: {ok:?}");
     let status2 = gateway.server_status().await;
-    let flakey2 = status2["servers"].as_array().unwrap().iter().find(|s| s["name"] == "flakey").expect("flakey entry");
+    let flakey2 = status2["servers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["name"] == "flakey")
+        .expect("flakey entry");
     assert_eq!(flakey2["status"], "active", "status back to active: {status2}");
 
     http_mock2.kill().expect("kill second http mock");

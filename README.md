@@ -32,11 +32,16 @@ myapp/
 │   └── capabilities/      # 权限声明
 ├── apps/desktop/          # 前端（Vue 3）
 │   └── src/
-│       ├── main.ts        # 入口：启动握手（mark_frontend_ready）
+│       ├── main.ts        # 入口：启动握手（mark_frontend_ready）+ Pinia/Router/全局错误处理
 │       ├── StartupGate.vue # 启动门：关闭确认 / 二次启动文件 / 深链接
-│       ├── App.vue        # ★ 业务 UI 从这里写
-│       └── lib/backend.ts # 类型化 IPC 封装
-├── scripts/               # dev / check / release 脚本
+│       ├── App.vue        # 应用外壳：标题栏 + 侧边导航 + <RouterView>（业务页面别写这里）
+│       ├── router/        # 路由表（hash 模式）：新增页面在此加 route
+│       ├── pages/         # 路由页面：HomePage / SettingsPage / McpConfigPage
+│       ├── stores/        # Pinia：app(版本/平台) / settings(开机启动/主题) / updater(更新状态机)
+│       ├── components/    # 组件：McpPanel、ToastHost、ErrorBoundary、ui/(基础组件)
+│       ├── lib/           # backend.ts(类型化 IPC) / theme.ts / toast.ts / errors.ts / startup.ts
+│       └── styles.css     # 设计令牌（CSS 变量）+ 全局样式
+├── scripts/               # dev / check / release / sync-version 脚本
 └── .github/workflows/release.yml  # tag v* → Windows 构建并正式发布 Release
 ```
 
@@ -54,6 +59,11 @@ pnpm dev:web
 
 # 检查（前端 typecheck + cargo check）
 pnpm check
+
+# 代码规范（详见下方「代码规范与工具链」）
+pnpm lint          # ESLint 检查前端与脚本
+pnpm format        # Prettier 格式化（含 .editorconfig 约束）
+pnpm fmt:rs:check  # rustfmt 检查（仅自有 crate，跳过 vendor/）
 
 # 构建安装包
 pnpm tauri build
@@ -105,10 +115,38 @@ MyApp 内置一个 **MCP 网关**（默认 `http://127.0.0.1:9876/mcp`，Streama
 
 ## 写你的业务
 
-1. **后端命令**：在 `src-tauri/src/commands/business/` 新建模块，在 `lib.rs` 的 `invoke_handler` 注册；
-2. **前端**：替换 `apps/desktop/src/App.vue`，在 `lib/backend.ts` 补类型化封装；
-3. **业务数据**：用 `AppState.storage` 的 `get_json/set_json` 或加业务表（见 `crates/app-core/src/storage.rs`）；
-4. **应用信息**：改 `src-tauri/tauri.conf.json`（productName / identifier / 版本 / 更新端点 / 签名公钥）。
+1. **后端命令**：在 `src-tauri/src/commands/business/` 新建模块（脚手架自带 `business_ping` / `business_echo` 示例），在 `commands/mod.rs` 声明、`lib.rs` 的 `generate_handler!` 里注册；前端在 `lib/backend.ts` 补类型化封装。
+   > 命令若依赖 `tauri::State<T>`，务必在 Builder 里 `.manage(...)` 注册，否则运行时报 `state not managed for field ...`（更新按钮"点了没反应"就是这么来的）。
+2. **前端页面**：在 `apps/desktop/src/pages/` 新建页面，在 `router/index.ts` 加一条 route（hash 模式），侧边导航加 `<RouterLink>`；页面状态放进 `stores/` 的 Pinia store，不要写进 `App.vue`。
+3. **UI 与主题**：优先复用 `components/ui/` 基础组件（BaseButton / BaseCard / BaseField / BaseToggle）；颜色一律引用 `styles.css` 的 CSS 变量（自动适配暗色模式），不要写死色值。
+4. **业务数据**：用 `AppState.storage` 的 `get_json/set_json` 或加业务表（见 `crates/app-core/src/storage.rs`）。
+5. **应用信息**：改 `src-tauri/tauri.conf.json`（productName / identifier / 版本 / 更新端点 / 签名公钥）。
+
+## 代码规范与工具链
+
+| 用途 | 命令 | 配置文件 |
+| --- | --- | --- |
+| 前端 lint | `pnpm lint` / `pnpm lint:fix` | `eslint.config.js`（flat config，ESLint 10 + typescript-eslint + eslint-plugin-vue） |
+| 前端格式化 | `pnpm format` / `pnpm format:check` | `.prettierrc.json` + `.prettierignore` |
+| 编辑器约定 | 自动生效 | `.editorconfig`（通用 2 空格、`*.rs` 4 空格、LF） |
+| Rust 格式化 | `pnpm fmt:rs` / `pnpm fmt:rs:check` | `rustfmt.toml`（`max_width = 120`） |
+
+> **注意**：`vendor/` 下的 crate 是定制的上游依赖（通过 `[patch.crates-io]` 引入），**不要格式化**。
+> `cargo fmt --all` 会连带格式化这些本地路径依赖，因此 `fmt:rs` 脚本显式用 `-p` 只格式化自有 crate
+> （`myapp` / `app-core` / `app-platform` / `app-mcp`）；`.prettierignore` 与 ESLint 的 `ignores` 亦已排除 `vendor/`。
+
+## 版本管理
+
+应用版本号需要出现在 4 个文件里（根 `package.json`、`apps/desktop/package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml`），
+`scripts/sync-version.mjs` 以**根 `package.json` 为单一事实来源**统一同步：
+
+```bash
+pnpm sync-version 0.2.0   # 改根 package.json 并同步到其它 3 处
+pnpm sync-version         # 用根 package.json 的现有版本覆盖其它 3 处
+pnpm sync-version --check # 只校验四处版本是否一致（不一致退出码 1，可用于 CI）
+```
+
+发布记录见 [`CHANGELOG.md`](./CHANGELOG.md)。
 
 ## 发布
 
@@ -118,9 +156,12 @@ MyApp 内置一个 **MCP 网关**（默认 `http://127.0.0.1:9876/mcp`，Streama
 # 1) 本地校验（可选）
 pnpm check
 
-# 2) 打标签并推送 → 触发流水线
-git tag v0.1.0
-git push origin v0.1.0
+# 2) 同步版本号（4 个文件保持一致）
+pnpm sync-version 0.2.0
+
+# 3) 打标签并推送 → 触发流水线
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 发布前需要在仓库配置 Secret：

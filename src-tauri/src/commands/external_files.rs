@@ -19,7 +19,10 @@ impl ExternalFileOpenState {
     }
 
     pub fn take_all(&self) -> Vec<PathBuf> {
-        self.pending.lock().map(|mut pending| std::mem::take(&mut *pending)).unwrap_or_default()
+        self.pending
+            .lock()
+            .map(|mut pending| std::mem::take(&mut *pending))
+            .unwrap_or_default()
     }
 }
 
@@ -46,5 +49,9 @@ pub fn file_paths_from_args(args: Vec<String>, cwd: &Path) -> Vec<PathBuf> {
 /// 前端取走待打开文件（单实例交接场景）。
 #[tauri::command]
 pub fn take_pending_files(state: tauri::State<'_, Arc<ExternalFileOpenState>>) -> Vec<String> {
-    state.take_all().into_iter().map(|path| path.to_string_lossy().into_owned()).collect()
+    state
+        .take_all()
+        .into_iter()
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect()
 }

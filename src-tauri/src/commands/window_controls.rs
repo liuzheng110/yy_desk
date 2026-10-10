@@ -38,8 +38,10 @@ async fn set_macos_traffic_light_position_inner(
             title_bar_container_view.setFrame(title_bar_rect);
 
             let close_rect = close.frame();
-            let current_window_rect =
-                close.superview().map(|view| view.convertRect_toView(close_rect, None)).unwrap_or(close_rect);
+            let current_window_rect = close
+                .superview()
+                .map(|view| view.convertRect_toView(close_rect, None))
+                .unwrap_or(close_rect);
             let current_center_y =
                 window_height - (current_window_rect.origin.y + current_window_rect.size.height / 2.0);
             let center_delta_y = target_window_center_y - current_center_y;
@@ -61,11 +63,17 @@ async fn set_macos_traffic_light_position_inner(
             };
             let zoom = ns_window.standardWindowButton(NSWindowButton::ZoomButton);
             let close_rect = close.frame();
-            let close_window_rect =
-                close.superview().map(|view| view.convertRect_toView(close_rect, None)).unwrap_or(close_rect);
+            let close_window_rect = close
+                .superview()
+                .map(|view| view.convertRect_toView(close_rect, None))
+                .unwrap_or(close_rect);
             let reserved_button_rect = zoom
                 .as_ref()
-                .and_then(|button| button.superview().map(|view| view.convertRect_toView(button.frame(), None)))
+                .and_then(|button| {
+                    button
+                        .superview()
+                        .map(|view| view.convertRect_toView(button.frame(), None))
+                })
                 .unwrap_or(close_window_rect);
             let button_center_y = window_height - (close_window_rect.origin.y + close_window_rect.size.height / 2.0);
             let _ = tx.send(Some(MacosTrafficLightLayout {
@@ -77,7 +85,9 @@ async fn set_macos_traffic_light_position_inner(
             }));
         })
         .map_err(|err| err.to_string())?;
-    rx.await.map_err(|err| err.to_string())?.ok_or_else(|| "Unable to locate macOS traffic light buttons".to_string())
+    rx.await
+        .map_err(|err| err.to_string())?
+        .ok_or_else(|| "Unable to locate macOS traffic light buttons".to_string())
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -88,7 +98,13 @@ async fn set_macos_traffic_light_position_inner(
     ui_scale: f64,
 ) -> Result<MacosTrafficLightLayout, String> {
     let center_y = target_center_y * ui_scale;
-    Ok(MacosTrafficLightLayout { x, y: center_y, center_y, previous_center_y: center_y, reserved_inset: 0.0 })
+    Ok(MacosTrafficLightLayout {
+        x,
+        y: center_y,
+        center_y,
+        previous_center_y: center_y,
+        reserved_inset: 0.0,
+    })
 }
 
 fn validate_macos_traffic_light_position(x: f64, y: f64, scale: f64) -> Result<(), String> {

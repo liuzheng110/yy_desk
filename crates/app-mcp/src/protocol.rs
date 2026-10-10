@@ -53,12 +53,21 @@ pub struct JsonRpcError {
 
 impl JsonRpcError {
     pub fn new(code: i64, message: impl Into<String>) -> Self {
-        Self { code, message: message.into(), data: None }
+        Self {
+            code,
+            message: message.into(),
+            data: None,
+        }
     }
 }
 
 pub fn ok_response(id: Value, result: Value) -> JsonRpcResponse {
-    JsonRpcResponse { jsonrpc: "2.0".into(), id, result: Some(result), error: None }
+    JsonRpcResponse {
+        jsonrpc: "2.0".into(),
+        id,
+        result: Some(result),
+        error: None,
+    }
 }
 
 pub fn error_response(id: Value, code: i64, message: impl Into<String>) -> JsonRpcResponse {

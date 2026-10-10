@@ -14,7 +14,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 const SETTINGS_TABLE: &str = "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)";
-const MIGRATIONS_TABLE: &str = "CREATE TABLE IF NOT EXISTS data_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)";
+const MIGRATIONS_TABLE: &str =
+    "CREATE TABLE IF NOT EXISTS data_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)";
 
 const DESKTOP_SETTINGS_KEY: &str = "desktop_settings";
 const APP_APPEARANCE_KEY: &str = "app_appearance";
@@ -122,7 +123,9 @@ pub fn maybe_import_user_data_db(
     data_dir: &Path,
     alternative_data_dir: Option<&Path>,
 ) -> Result<DataDbImportResult, String> {
-    let Some(alt) = alternative_data_dir else { return Ok(DataDbImportResult::NoImport) };
+    let Some(alt) = alternative_data_dir else {
+        return Ok(DataDbImportResult::NoImport);
+    };
     let target_db = data_dir.join("app.db");
     let alt_db = alt.join("app.db");
     if target_db.exists() || !alt_db.exists() {
@@ -130,7 +133,10 @@ pub fn maybe_import_user_data_db(
     }
     std::fs::create_dir_all(data_dir).map_err(|e| format!("Failed to create data dir: {e}"))?;
     std::fs::copy(&alt_db, &target_db).map_err(|e| format!("Failed to import user data db: {e}"))?;
-    Ok(DataDbImportResult::Imported { from: alt_db, to: target_db })
+    Ok(DataDbImportResult::Imported {
+        from: alt_db,
+        to: target_db,
+    })
 }
 
 /// 应用设置存储。内部是单连接 + Mutex，简单可靠；
@@ -149,7 +155,9 @@ impl Storage {
         let conn = Connection::open(path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.execute_batch(&format!("{SETTINGS_TABLE}; {MIGRATIONS_TABLE};"))?;
-        Ok(Storage { db: Arc::new(Mutex::new(conn)) })
+        Ok(Storage {
+            db: Arc::new(Mutex::new(conn)),
+        })
     }
 
     /// 数据迁移状态。新框架首次打开即 ready。
@@ -158,12 +166,19 @@ impl Storage {
     }
 
     pub async fn load_desktop_settings(&self) -> Result<DesktopSettings, String> {
-        Ok(self.get_json(DESKTOP_SETTINGS_KEY).await?.and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default())
+        Ok(self
+            .get_json(DESKTOP_SETTINGS_KEY)
+            .await?
+            .and_then(|v| serde_json::from_value(v).ok())
+            .unwrap_or_default())
     }
 
     pub async fn save_desktop_settings(&self, settings: &DesktopSettings) -> Result<(), String> {
-        self.set_json(DESKTOP_SETTINGS_KEY, &serde_json::to_value(settings).map_err(|e| e.to_string())?)
-            .await
+        self.set_json(
+            DESKTOP_SETTINGS_KEY,
+            &serde_json::to_value(settings).map_err(|e| e.to_string())?,
+        )
+        .await
     }
 
     pub async fn load_app_appearance_settings(&self) -> Result<AppAppearanceSettings, String> {
@@ -195,8 +210,11 @@ impl Storage {
         if patch.corner_style.is_some() {
             current.corner_style = patch.corner_style.clone();
         }
-        self.set_json(APP_APPEARANCE_KEY, &serde_json::to_value(&current).map_err(|e| e.to_string())?)
-            .await
+        self.set_json(
+            APP_APPEARANCE_KEY,
+            &serde_json::to_value(&current).map_err(|e| e.to_string())?,
+        )
+        .await
     }
 
     /// 多标签页/窗口状态存储（如 open_tabs、detached_tabs）。

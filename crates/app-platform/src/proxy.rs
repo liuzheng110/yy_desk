@@ -15,10 +15,14 @@ fn system_proxy_url_from_platform() -> Option<String> {
 #[cfg(target_os = "windows")]
 fn system_proxy_url_from_platform() -> Option<String> {
     let key = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings";
-    let proxy_enable =
-        crate::process::new_std_command("reg").args(["query", key, "/v", "ProxyEnable"]).output().ok()?;
-    let proxy_server =
-        crate::process::new_std_command("reg").args(["query", key, "/v", "ProxyServer"]).output().ok()?;
+    let proxy_enable = crate::process::new_std_command("reg")
+        .args(["query", key, "/v", "ProxyEnable"])
+        .output()
+        .ok()?;
+    let proxy_server = crate::process::new_std_command("reg")
+        .args(["query", key, "/v", "ProxyServer"])
+        .output()
+        .ok()?;
     if !proxy_enable.status.success() || !proxy_server.status.success() {
         return None;
     }
@@ -68,13 +72,21 @@ fn system_proxy_url_from_windows_registry_output(proxy_enable: &str, proxy_serve
         return None;
     }
 
-    let server = proxy_server.lines().find(|line| line.contains("ProxyServer"))?.split_whitespace().last()?;
+    let server = proxy_server
+        .lines()
+        .find(|line| line.contains("ProxyServer"))?
+        .split_whitespace()
+        .last()?;
 
     proxy_url_from_windows_proxy_server(server)
 }
 
 fn proxy_url_from_windows_proxy_server(server: &str) -> Option<String> {
-    let entries = server.split(';').map(str::trim).filter(|entry| !entry.is_empty()).collect::<Vec<_>>();
+    let entries = server
+        .split(';')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .collect::<Vec<_>>();
 
     for key in ["https=", "http="] {
         if let Some(entry) = entries.iter().find_map(|entry| entry.strip_prefix(key)) {
@@ -84,7 +96,10 @@ fn proxy_url_from_windows_proxy_server(server: &str) -> Option<String> {
         }
     }
 
-    entries.iter().find(|entry| !entry.contains('=')).and_then(|entry| proxy_url_from_host_port(entry))
+    entries
+        .iter()
+        .find(|entry| !entry.contains('='))
+        .and_then(|entry| proxy_url_from_host_port(entry))
 }
 
 fn proxy_url_from_host_port(value: &str) -> Option<String> {
@@ -110,7 +125,11 @@ fn proxy_url(host: &str, port: &str) -> Option<String> {
     if host.is_empty() || port.parse::<u16>().is_err() {
         return None;
     }
-    let host = if host.contains(':') && !host.starts_with('[') { format!("[{host}]") } else { host.to_string() };
+    let host = if host.contains(':') && !host.starts_with('[') {
+        format!("[{host}]")
+    } else {
+        host.to_string()
+    };
     Some(format!("http://{host}:{port}"))
 }
 
@@ -129,7 +148,10 @@ mod tests {
   HTTPSProxy : 127.0.0.1
 }"#;
 
-        assert_eq!(system_proxy_url_from_scutil_output(output), Some("http://127.0.0.1:7891".to_string()));
+        assert_eq!(
+            system_proxy_url_from_scutil_output(output),
+            Some("http://127.0.0.1:7891".to_string())
+        );
     }
 
     #[test]
@@ -141,13 +163,22 @@ mod tests {
   HTTPSEnable : 0
 }"#;
 
-        assert_eq!(system_proxy_url_from_scutil_output(output), Some("http://127.0.0.1:7890".to_string()));
+        assert_eq!(
+            system_proxy_url_from_scutil_output(output),
+            Some("http://127.0.0.1:7890".to_string())
+        );
     }
 
     #[test]
     fn ignores_disabled_or_incomplete_macos_system_proxy() {
-        assert_eq!(system_proxy_url_from_scutil_output("HTTPEnable : 0\nHTTPProxy : 127.0.0.1\nHTTPPort : 7890"), None);
-        assert_eq!(system_proxy_url_from_scutil_output("HTTPEnable : 1\nHTTPProxy : 127.0.0.1"), None);
+        assert_eq!(
+            system_proxy_url_from_scutil_output("HTTPEnable : 0\nHTTPProxy : 127.0.0.1\nHTTPPort : 7890"),
+            None
+        );
+        assert_eq!(
+            system_proxy_url_from_scutil_output("HTTPEnable : 1\nHTTPProxy : 127.0.0.1"),
+            None
+        );
     }
 
     #[test]

@@ -135,6 +135,54 @@ body {
   border: 1.5px solid #fafafa;
 }
 
+/* ---- 检查更新结果提示（已是最新 / 检查失败）---- */
+.update-notice {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 14px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fafafa;
+  color: #374151;
+  font-size: 12.5px;
+}
+
+.update-notice.info {
+  background: #f6fdfa;
+  border-bottom-color: #d9f2e6;
+  color: #0f6e56;
+}
+
+.update-notice.error {
+  background: #fef2f2;
+  border-bottom-color: #fee2e2;
+  color: #b91c1c;
+}
+
+.update-notice-text {
+  min-width: 0;
+  word-break: break-word;
+  user-select: text;
+}
+
+.update-notice-close {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+  opacity: 0.65;
+}
+
+.update-notice-close:hover {
+  opacity: 1;
+}
+
 /* ---- 新版本提示条（标题栏下方）---- */
 .update-banner {
   flex: 0 0 auto;

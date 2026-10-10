@@ -19,6 +19,8 @@ const updateDismissed = ref(false);
 const updateError = ref("");
 const progress = ref<{ downloaded: number; total: number | null } | null>(null);
 const installing = ref(false);
+// 手动检查的结果反馈（已是最新 / 检查失败），避免“点了没反应”
+const updateNotice = ref<{ kind: "info" | "error"; text: string } | null>(null);
 
 const autostart = ref(false);
 const autostartBusy = ref(false);
@@ -30,6 +32,7 @@ const isTauri = typeof window.__TAURI_INTERNALS__ !== "undefined";
 
 let unlistenProgress: UnlistenFn | null = null;
 let autoCheckTimer: number | null = null;
+let noticeTimer: number | null = null;
 
 // ---- 窗口控制（Overlay 标题栏下原生按钮被隐藏，由前端补齐标配）----
 async function minimizeWindow() {
@@ -73,19 +76,46 @@ function newAttemptId(): string {
   return `attempt-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function showUpdateNotice(kind: "info" | "error", text: string) {
+  updateNotice.value = { kind, text };
+  if (noticeTimer !== null) window.clearTimeout(noticeTimer);
+  noticeTimer = window.setTimeout(
+    () => {
+      updateNotice.value = null;
+      noticeTimer = null;
+    },
+    kind === "error" ? 8000 : 3500,
+  );
+}
+
+function dismissUpdateNotice() {
+  updateNotice.value = null;
+  if (noticeTimer !== null) {
+    window.clearTimeout(noticeTimer);
+    noticeTimer = null;
+  }
+}
+
 async function checkUpdate(manual = false) {
   if (updateState.value === "checking" || updateState.value === "downloading") return;
   updateState.value = "checking";
   updateError.value = "";
+  if (manual) dismissUpdateNotice();
   try {
     const info = await backend.checkForUpdates();
     update.value = info;
     updateState.value = info.update_available ? "available" : "none";
     if (manual) updateDismissed.value = false;
+    // 自动检查时静默，只有用户主动点“检查更新”才提示“已是最新”
+    if (!info.update_available && manual) {
+      showUpdateNotice("info", `已是最新版本（v${info.current_version}）`);
+    }
   } catch (error) {
     console.error("[UPDATE] check failed", error);
-    updateError.value = String(error);
+    const message = String(error);
+    updateError.value = message;
     updateState.value = "idle";
+    showUpdateNotice("error", `检查更新失败：${message}`);
   }
 }
 
@@ -232,6 +262,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   unlistenProgress?.();
   if (autoCheckTimer !== null) window.clearTimeout(autoCheckTimer);
+  if (noticeTimer !== null) window.clearTimeout(noticeTimer);
 });
 </script>
 
@@ -316,6 +347,12 @@ onBeforeUnmount(() => {
         <button class="wc-btn" title="最大化 / 还原" aria-label="最大化" @click="toggleMaximizeWindow">&#x2610;</button>
         <button class="wc-btn wc-close" title="关闭" aria-label="关闭" @click="closeWindow">&#x2715;</button>
       </div>
+    </div>
+
+    <!-- 检查更新反馈：手动检查“已是最新”或检查失败时出现，避免点按钮无反应 -->
+    <div v-if="updateNotice" class="update-notice" :class="updateNotice.kind">
+      <span class="update-notice-text">{{ updateNotice.text }}</span>
+      <button class="update-notice-close" aria-label="关闭提示" @click="dismissUpdateNotice">✕</button>
     </div>
 
     <!-- 新版本提示条：启动检测到新版本 / 下载中 / 已下载时出现在标题栏下方 -->

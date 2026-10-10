@@ -1,10 +1,10 @@
 // MyApp 应用发布脚本（极简版）。
 //
-// 发布流程（与 dbx 相同：tag 触发 CI 构建草稿 Release）：
+// 发布流程（tag 触发 CI 构建并正式发布 Release）：
 //   1. pnpm release  <-- 本地校验 + 构建
 //   2. git tag vX.Y.Z && git push origin vX.Y.Z
-//   3. GitHub Actions 在三个平台构建并上传安装包（含 latest.json 更新元数据）
-//   4. 在 GitHub Releases 页面检查/发布草稿
+//   3. GitHub Actions 在 windows-2022 上构建 Windows NSIS 安装包（含 latest.json 更新元数据）
+//   4. 流水线直接发布正式 Release，客户端据此自动更新
 //
 // 用法：node scripts/release.mjs [--skip-build] [--dry-run]
 
@@ -51,5 +51,5 @@ console.log(`[release] next steps:
   1. git add -A && git commit -m "release: ${gitTag}"
   2. git tag ${gitTag}
   3. git push origin ${gitTag}
-  4. wait for the Release workflow, then publish the draft on GitHub Releases
+  4. wait for the Release workflow on GitHub Actions (it publishes the release directly)
 `);

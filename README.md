@@ -128,7 +128,8 @@ git push origin v0.1.0
 | Secret | 说明 |
 | --- | --- |
 | `TAURI_SIGNING_PRIVATE_KEY` | minisign 私钥内容（`.signing/myapp.key` 的文本内容），用于给 `latest.json` 与安装包签名 |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 私钥口令；本仓库密钥**无口令**，可留空或不配置 |
+
+> 密钥已按**无口令**生成，因此不需要 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。
 
 > 更新地址固定指向 `https://github.com/liuzheng110/yy_desk/releases/latest/download/latest.json`，因此**必须发布正式 Release**，草稿不会被 `latest` 命中。
 

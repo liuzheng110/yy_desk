@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - "v*"
-  # 允许在 Actions 页面手动触发，方便重跑失败的发布。
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -44,7 +42,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "MyApp ${{ github.ref_name }}"

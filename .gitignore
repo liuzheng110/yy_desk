@@ -1,0 +1,44 @@
+# Node
+node_modules/
+dist/
+dist-web-static/
+apps/desktop/dist/
+
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock.orig
+
+# Tauri
+src-tauri/gen/
+src-tauri/target/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Updater signing keys (never commit private keys)
+.signing/
+
+# Local portable build output
+portable/
+
+# Scratch / debug artifacts
+check_proc.txt
+exe_icon_check*.png
+icon-transparent-v*.png

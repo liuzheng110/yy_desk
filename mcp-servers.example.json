@@ -1,0 +1,50 @@
+{
+  "port": 9876,
+  "metaMode": false,
+  "autoWarmStart": true,
+  "failsafe": {
+    "failureThreshold": 5,
+    "resetTimeoutSec": 30,
+    "warmStartRetries": 6
+  },
+  "servers": [
+    {
+      "name": "example-fs",
+      "enabled": false,
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "./"],
+      "cwd": null,
+      "env": {},
+      "toolPrefix": null,
+      "toolTimeoutMs": null,
+      "failureThreshold": null,
+      "resetTimeoutSec": null
+    },
+    {
+      "name": "example-http",
+      "enabled": false,
+      "transport": "http",
+      "url": "https://example.com/mcp",
+      "headers": {},
+      "toolPrefix": null,
+      "toolTimeoutMs": null,
+      "failureThreshold": null,
+      "resetTimeoutSec": null
+    },
+    {
+      "name": "example-desktop-app",
+      "enabled": false,
+      "transport": "stdio",
+      "command": "C:\\Path\\To\\app-mcp.exe",
+      "autoStart": {
+        "enabled": true,
+        "command": "C:\\Path\\To\\App.exe",
+        "args": [],
+        "portFile": "C:\\Path\\To\\discovery.json",
+        "portField": "port",
+        "startupTimeoutMs": 20000
+      }
+    }
+  ]
+}

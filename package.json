@@ -1,0 +1,37 @@
+{
+  "name": "myapp",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config apps/desktop/vite.config.ts",
+    "dev:tauri": "node scripts/dev-tauri.mjs",
+    "dev:web": "vite --config apps/desktop/vite.config.ts --port 5173 --mode web",
+    "typecheck": "vue-tsc --noEmit --project apps/desktop/tsconfig.json",
+    "build": "vite build --config apps/desktop/vite.config.ts",
+    "build:checked": "pnpm typecheck && pnpm build",
+    "check": "node scripts/run-check.mjs",
+    "preview": "vite preview --config apps/desktop/vite.config.ts",
+    "tauri": "tauri",
+    "release": "node scripts/release.mjs",
+    "test:release": "node --test scripts/release.test.mjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/plugin-updater": "2.10.1",
+    "vue": "^3.5.35"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/node": "^25.9.1",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "typescript": "~6.0.3",
+    "vite": "^8.2.1",
+    "vue-tsc": "^3.3.3"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "packageManager": "pnpm@11.20.0"
+}

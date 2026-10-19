@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-const GITHUB_RELEASES_API: &str = "https://api.github.com/repos/liuzheng110/yy_desk/releases?per_page=50";
+use app_platform::identity::GITHUB_RELEASES_API;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

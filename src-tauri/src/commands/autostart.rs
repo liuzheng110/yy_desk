@@ -6,7 +6,8 @@
 //!
 //! 不依赖 tauri-plugin-autostart，避免新增第三方依赖与权限配置。
 
-const AUTOSTART_VALUE_NAME: &str = "MyApp";
+// Preserve the existing registry value for this application; derived apps use their own name.
+const AUTOSTART_VALUE_NAME: &str = app_platform::identity::APP_NAME;
 
 /// 查询开机自启动是否开启。
 #[tauri::command]
@@ -115,7 +116,8 @@ mod imp {
                 let home = std::env::var_os("HOME").unwrap_or_default();
                 PathBuf::from(home).join(".config")
             });
-        base.join("autostart").join("myapp.desktop")
+        base.join("autostart")
+            .join(format!("{}.desktop", app_platform::identity::APP_ID))
     }
 
     pub fn enabled() -> std::io::Result<bool> {
@@ -130,7 +132,8 @@ mod imp {
             }
             let exe = std::env::current_exe()?;
             let content = format!(
-                "[Desktop Entry]\nType=Application\nName=MyApp\nExec={}\nX-GNOME-Autostart-enabled=true\n",
+                "[Desktop Entry]\nType=Application\nName={}\nExec={}\nX-GNOME-Autostart-enabled=true\n",
+                app_platform::identity::APP_NAME,
                 exe.to_string_lossy()
             );
             std::fs::write(path, content)
@@ -153,7 +156,7 @@ mod imp {
         PathBuf::from(home)
             .join("Library")
             .join("LaunchAgents")
-            .join("com.myapp.app.plist")
+            .join(format!("{}.plist", app_platform::identity::APP_ID))
     }
 
     fn xml_escape(s: &str) -> String {
@@ -180,7 +183,7 @@ mod imp {
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.myapp.app</string>
+    <string>{}</string>
     <key>ProgramArguments</key>
     <array>
         <string>{}</string>
@@ -190,6 +193,7 @@ mod imp {
 </dict>
 </plist>
 "#,
+                xml_escape(app_platform::identity::APP_ID),
                 xml_escape(&exe.to_string_lossy())
             );
             std::fs::write(path, content)

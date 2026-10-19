@@ -62,7 +62,16 @@ function onThemeChange(event: Event) {
       </div>
       <div class="setting-row static">
         <span>检查更新</span>
-        <button class="update-btn" :disabled="updater.state === 'checking'" @click="updater.check(true)">
+        <button
+          class="update-btn"
+          :disabled="
+            updater.initializing ||
+            updater.installing ||
+            updater.state === 'checking' ||
+            updater.state === 'downloading'
+          "
+          @click="updater.check(true)"
+        >
           {{ updater.title() }}
         </button>
       </div>

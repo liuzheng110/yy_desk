@@ -1,6 +1,6 @@
 [package]
 name = "myapp"
-version = "0.1.4"
+version = "0.1.5"
 description = "MyApp desktop framework (Tauri 2 shell)"
 authors = ["you"]
 license = "Apache-2.0"
@@ -23,7 +23,6 @@ tauri-build = { version = "2.5.6", features = [] }
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-base64 = "0.22"
 log = "0.4"
 tauri = { version = "2.10.3", features = ["tray-icon", "image-png"] }
 tauri-plugin-log = "2"
@@ -43,10 +42,7 @@ tauri-plugin-window-state = "2"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 reqwest = { version = "0.12", features = ["json", "stream"] }
 percent-encoding = "2"
-minisign-verify = "0.2.5"
-semver = "1"
 sha2 = "0.10"
-zip = "4.6.1"
 app-core = { path = "../crates/app-core", default-features = false }
 app-platform = { path = "../crates/app-platform" }
 app-mcp = { path = "../crates/app-mcp" }

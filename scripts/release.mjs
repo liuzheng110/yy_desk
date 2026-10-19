@@ -21,14 +21,20 @@ function fail(message) {
 }
 
 function run(command, commandArgs, options = {}) {
-  const result = spawnSync(command, commandArgs, {
-    cwd: process.cwd(),
-    env: process.env,
-    encoding: "utf8",
-    stdio: options.stdio ?? "pipe",
-  });
+  // Only fixed script names are passed here. Windows needs cmd for pnpm.cmd.
+  const windows = process.platform === "win32";
+  const result = spawnSync(
+    windows ? "cmd.exe" : command,
+    windows ? ["/d", "/s", "/c", [command, ...commandArgs].join(" ")] : commandArgs,
+    {
+      cwd: process.cwd(),
+      env: process.env,
+      encoding: "utf8",
+      stdio: options.stdio ?? "pipe",
+    },
+  );
   if (result.status !== 0) {
-    fail(`${command} ${commandArgs.join(" ")} failed:\n${(result.stderr || "").trim()}`);
+    fail(`${command} ${commandArgs.join(" ")} failed:\n${result.error?.message ?? (result.stderr || "").trim()}`);
   }
   return result;
 }
@@ -40,16 +46,18 @@ const gitTag = `v${version}`;
 console.log(`[release] version: ${version}`);
 console.log(`[release] git tag: ${gitTag}`);
 
+if (!dryRun) {
+  console.log("[release] validating application, public files and regression tests…");
+  run("pnpm", ["validate"], { stdio: "inherit" });
+}
 if (!dryRun && !skipBuild) {
-  console.log("[release] running pnpm build:checked (typecheck + vite build)…");
-  run("pnpm", ["build:checked"]);
   console.log("[release] running tauri build…");
-  run("pnpm", ["tauri", "build"]);
+  run("pnpm", ["tauri", "build"], { stdio: "inherit" });
 }
 
 console.log(`[release] next steps:
-  1. git add -A && git commit -m "release: ${gitTag}"
+  1. review git diff and stage the intended source changes, then commit
   2. git tag ${gitTag}
   3. git push origin ${gitTag}
-  4. wait for the Release workflow on GitHub Actions (it publishes the release directly)
+  4. wait for checks, signed draft build and asset verification; CI then publishes automatically
 `);

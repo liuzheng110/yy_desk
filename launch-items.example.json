@@ -1,0 +1,10 @@
+[
+  {
+    "id": "example-app",
+    "name": "示例应用",
+    "command": "C:\\Tools\\Example\\Example.exe",
+    "args": [],
+    "workdir": "C:\\Tools\\Example",
+    "enabled": true
+  }
+]

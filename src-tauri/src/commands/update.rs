@@ -6,25 +6,17 @@ use std::sync::{
 use std::time::Duration;
 
 pub use super::update_cache::DownloadedUpdate;
-use super::{
-    update_cache::{self, CacheRecord},
-    update_portable,
-};
+use super::update_cache::{self, CacheRecord};
 pub use app_core::update::UpdateInfo;
-use semver::Version;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
-const OFFICIAL_UPDATE_ENDPOINTS: [&str; 1] =
-    ["https://github.com/liuzheng110/yy_desk/releases/latest/download/latest.json"];
-const GITHUB_RELEASE_DOWNLOAD_PREFIX: &str = "https://github.com/liuzheng110/yy_desk/releases/download/";
-const RELEASE_URL_PREFIX: &str = "https://github.com/liuzheng110/yy_desk/releases/tag/v";
+use app_platform::identity::{GITHUB_RELEASE_DOWNLOAD_PREFIX, RELEASE_URL_PREFIX, UPDATE_ENDPOINT};
+const OFFICIAL_UPDATE_ENDPOINTS: [&str; 1] = [UPDATE_ENDPOINT];
 const UPDATE_DOWNLOAD_PROGRESS_EVENT: &str = "update-download-progress";
 const DOWNLOAD_CANCELED_ERROR: &str = "Download canceled by user.";
 const DOWNLOAD_STALL_TIMEOUT: Duration = Duration::from_secs(15);
-const MAX_PORTABLE_ARCHIVE_BYTES: usize = 512 * 1024 * 1024;
-const MAX_PORTABLE_SIGNATURE_BYTES: usize = 64 * 1024;
 const IS_WINDOWS_7_TARGET: bool = cfg!(target_vendor = "win7");
 
 #[derive(Clone, Debug, Serialize)]
@@ -70,13 +62,6 @@ struct CachedUpdate {
 
 enum ReadyUpdate {
     Installer { update: Box<Update>, bytes: Vec<u8> },
-    Portable { archive: Vec<u8>, version: Version },
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct PortableAssetCandidate {
-    archive_url: String,
-    signature_url: String,
 }
 
 #[derive(Debug)]
@@ -150,10 +135,7 @@ impl PendingUpdateState {
         if !is_current {
             return Err(DOWNLOAD_CANCELED_ERROR.to_string());
         }
-        let bytes = match &update.ready {
-            ReadyUpdate::Installer { bytes, .. } => bytes,
-            ReadyUpdate::Portable { archive, .. } => archive,
-        };
+        let ReadyUpdate::Installer { bytes, .. } = &update.ready;
         update_cache::commit(root, &update.record, bytes)?;
         *pending = Some(PendingUpdate::Ready(Box::new(update)));
         Ok(())
@@ -240,17 +222,6 @@ fn updater_endpoints() -> Vec<String> {
         .collect()
 }
 
-fn portable_asset_candidates(latest_version: &str, arch: &str) -> Result<Vec<PortableAssetCandidate>, String> {
-    let normalized_version = latest_version.trim().trim_start_matches('v');
-    let filename = update_portable::portable_asset_name(normalized_version, arch)?;
-    let tag = tag_version(normalized_version);
-    let archive_url = format!("{GITHUB_RELEASE_DOWNLOAD_PREFIX}{tag}/{filename}");
-    Ok(vec![PortableAssetCandidate {
-        signature_url: format!("{archive_url}.sig"),
-        archive_url,
-    }])
-}
-
 fn installer_asset_candidates(download_url: &str, latest_version: Option<&str>) -> Vec<String> {
     let filename = download_url
         .rsplit('/')
@@ -296,7 +267,6 @@ pub async fn check_for_updates() -> Result<UpdateInfo, String> {
     let release = app_core::update::fetch_latest_release().await?;
     let current_version = env!("CARGO_PKG_VERSION");
     let mut info = app_core::update::build_update_info(release, current_version);
-    info.portable_mode = crate::data_dir::is_portable_mode();
     info.manual_update_only = requires_manual_update(IS_WINDOWS_7_TARGET);
     Ok(info)
 }
@@ -324,9 +294,6 @@ pub fn cancel_update_download(state: tauri::State<'_, PendingUpdateState>) {
 }
 
 fn package_kind(app: &AppHandle) -> Result<String, String> {
-    if crate::data_dir::is_portable_mode() {
-        return Ok("portable".into());
-    }
     Ok(app
         .updater_builder()
         .build()
@@ -335,11 +302,8 @@ fn package_kind(app: &AppHandle) -> Result<String, String> {
         .into())
 }
 
-fn validate_cache_target(record: &CacheRecord, portable_mode: bool, package_kind: &str) -> Result<(), String> {
-    if record.package_kind != package_kind
-        || record.os != std::env::consts::OS
-        || record.arch != std::env::consts::ARCH
-        || record.info.portable_mode != portable_mode
+fn validate_cache_target(record: &CacheRecord, package_kind: &str) -> Result<(), String> {
+    if record.package_kind != package_kind || record.os != std::env::consts::OS || record.arch != std::env::consts::ARCH
     {
         return Err("Cached update does not match this installation.".into());
     }
@@ -356,38 +320,25 @@ fn restore_cached(app: &AppHandle) -> Result<Option<CachedUpdate>, String> {
         let Some((record, bytes)) = update_cache::read(&root)? else {
             return Ok(None);
         };
-        validate_cache_target(&record, crate::data_dir::is_portable_mode(), &package_kind(app)?)?;
-        let version =
-            update_portable::validate_requested_portable_version(&record.info.version, env!("CARGO_PKG_VERSION"))?;
-        let ready = if record.info.portable_mode {
-            update_portable::verify_portable_archive(
-                &bytes,
-                record.signature.as_deref().ok_or("Missing cached signature")?,
-                &version,
-                std::env::consts::ARCH,
-            )?;
-            ReadyUpdate::Portable {
-                archive: bytes,
-                version,
-            }
-        } else {
-            let update = app
-                .updater_builder()
-                .build()
-                .map_err(|e| e.to_string())?
-                .restore_update(record.manifest.clone().ok_or("Missing cached release metadata")?)
-                .map_err(|e| e.to_string())?
-                .ok_or("Cached update is no longer newer")?;
-            if update.version != record.info.version {
-                return Err("Cached release version mismatch".into());
-            }
-            update.verify(&bytes).map_err(|e| e.to_string())?;
-            ReadyUpdate::Installer {
+        validate_cache_target(&record, &package_kind(app)?)?;
+        let update = app
+            .updater_builder()
+            .build()
+            .map_err(|e| e.to_string())?
+            .restore_update(record.manifest.clone().ok_or("Missing cached release metadata")?)
+            .map_err(|e| e.to_string())?
+            .ok_or("Cached update is no longer newer")?;
+        if update.version != record.info.version {
+            return Err("Cached release version mismatch".into());
+        }
+        update.verify(&bytes).map_err(|e| e.to_string())?;
+        Ok(Some(CachedUpdate {
+            record,
+            ready: ReadyUpdate::Installer {
                 update: Box::new(update),
                 bytes,
-            }
-        };
-        Ok(Some(CachedUpdate { record, ready }))
+            },
+        }))
     })();
     if restored.is_err() {
         update_cache::discard(&root)?;
@@ -438,11 +389,9 @@ pub async fn download_update(
     attempt_id: String,
     release_notes: Option<String>,
 ) -> Result<DownloadedUpdate, String> {
-    let portable_mode = crate::data_dir::is_portable_mode();
     if requires_manual_update(IS_WINDOWS_7_TARGET) {
         return Err("Windows 7 builds must be updated with the dedicated Windows 7 offline installer.".to_string());
     }
-    let version = update_portable::validate_requested_portable_version(&latest_version, env!("CARGO_PKG_VERSION"))?;
     if attempt_id.is_empty() || attempt_id.len() > 128 {
         return Err("Invalid download attempt identifier.".into());
     }
@@ -451,59 +400,38 @@ pub async fn download_update(
         let cache_root = update_cache::root(&app)?;
         update_cache::discard(&cache_root)?;
         update_cache::ensure_writable(&cache_root)?;
-        let (ready, manifest, signature, notes) = if portable_mode {
-            let (archive, signature) =
-                download_portable_update_inner(&app, &version, &attempt_id, &cancellation).await?;
-            (
-                ReadyUpdate::Portable {
-                    archive,
-                    version: version.clone(),
-                },
-                None,
-                Some(signature),
-                String::new(),
-            )
-        } else {
-            let (update, bytes) =
-                download_update_inner(&app, Some(&latest_version), &attempt_id, &cancellation).await?;
-            let manifest = Some(update.raw_json.clone());
-            let notes = update.body.clone().unwrap_or_default();
-            (
-                ReadyUpdate::Installer {
-                    update: Box::new(update),
-                    bytes,
-                },
-                manifest,
-                None,
-                notes,
-            )
+        let (update, bytes) = download_update_inner(&app, Some(&latest_version), &attempt_id, &cancellation).await?;
+        let manifest = Some(update.raw_json.clone());
+        let notes = update.body.clone().unwrap_or_default();
+        let package_length = bytes.len() as u64;
+        let package_sha256 = update_cache::digest(&bytes);
+        let ready = ReadyUpdate::Installer {
+            update: Box::new(update),
+            bytes,
         };
+        let version_text = latest_version.trim().trim_start_matches('v');
         let info = DownloadedUpdate {
             cache_id: uuid::Uuid::new_v4().to_string(),
-            version: version.to_string(),
-            portable_mode,
-            release_url: format!("{RELEASE_URL_PREFIX}{version}"),
+            version: version_text.to_string(),
+            portable_mode: false,
+            release_url: format!("{RELEASE_URL_PREFIX}{version_text}"),
             release_notes: release_notes.unwrap_or(notes),
             downloaded_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_err(|e| e.to_string())?
                 .as_millis() as u64,
         };
-        let bytes = match &ready {
-            ReadyUpdate::Installer { bytes, .. } => bytes,
-            ReadyUpdate::Portable { archive, .. } => archive,
-        };
         let cached = CachedUpdate {
             record: CacheRecord {
                 schema_version: 1,
                 package_kind: package_kind(&app)?,
-                package_length: bytes.len() as u64,
-                package_sha256: update_cache::digest(bytes),
+                package_length,
+                package_sha256,
                 info: info.clone(),
                 os: std::env::consts::OS.into(),
                 arch: std::env::consts::ARCH.into(),
                 manifest,
-                signature,
+                signature: None,
             },
             ready,
         };
@@ -657,170 +585,6 @@ async fn download_update_inner(
     ))
 }
 
-async fn download_portable_update_inner(
-    app: &AppHandle,
-    latest_version: &Version,
-    attempt_id: &str,
-    cancellation: &Arc<DownloadCancellation>,
-) -> Result<(Vec<u8>, String), String> {
-    let latest_version_text = latest_version.to_string();
-    let candidates = portable_asset_candidates(&latest_version_text, std::env::consts::ARCH)?;
-    let client = portable_update_http_client()?;
-    let mut failures = Vec::new();
-
-    for candidate in candidates {
-        if cancellation.is_canceled() {
-            return Err(DOWNLOAD_CANCELED_ERROR.to_string());
-        }
-        println!("[UPDATE] downloading portable update from {}", candidate.archive_url);
-        let result = async {
-            let signature = download_bounded_bytes(
-                &client,
-                &candidate.signature_url,
-                MAX_PORTABLE_SIGNATURE_BYTES,
-                None,
-                attempt_id,
-                &latest_version_text,
-                cancellation,
-            )
-            .await?;
-            let signature = String::from_utf8(signature)
-                .map_err(|error| format!("Portable update signature is not valid UTF-8: {error}"))?;
-            let archive = download_bounded_bytes(
-                &client,
-                &candidate.archive_url,
-                MAX_PORTABLE_ARCHIVE_BYTES,
-                Some(app),
-                attempt_id,
-                &latest_version_text,
-                cancellation,
-            )
-            .await?;
-            update_portable::verify_portable_archive(&archive, &signature, latest_version, std::env::consts::ARCH)?;
-            Ok::<(Vec<u8>, String), String>((archive, signature))
-        }
-        .await;
-
-        match result {
-            Ok(archive) => return Ok(archive),
-            Err(error) => {
-                if cancellation.is_canceled() || error.contains("canceled") {
-                    return Err(DOWNLOAD_CANCELED_ERROR.to_string());
-                }
-                println!("[UPDATE] portable update candidate failed: {error}");
-                failures.push(format!("{}: {error}", candidate.archive_url));
-            }
-        }
-    }
-
-    Err(format!(
-        "Failed to download a verified portable update. {}",
-        failures.join("; ")
-    ))
-}
-
-fn portable_update_http_client() -> Result<reqwest::Client, String> {
-    let mut builder = reqwest::Client::builder()
-        .connect_timeout(Duration::from_secs(15))
-        .read_timeout(Duration::from_secs(15))
-        .timeout(Duration::from_secs(15 * 60));
-    if let Some(proxy_url) = app_core::update::system_proxy_url() {
-        let proxy = reqwest::Proxy::all(&proxy_url).map_err(|error| format!("Invalid system proxy URL: {error}"))?;
-        builder = builder.proxy(proxy);
-    }
-    builder
-        .build()
-        .map_err(|error| format!("Failed to create portable update client: {error}"))
-}
-
-async fn download_bounded_bytes(
-    client: &reqwest::Client,
-    url: &str,
-    max_bytes: usize,
-    progress_app: Option<&AppHandle>,
-    attempt_id: &str,
-    version: &str,
-    cancellation: &DownloadCancellation,
-) -> Result<Vec<u8>, String> {
-    if cancellation.is_canceled() {
-        return Err(DOWNLOAD_CANCELED_ERROR.to_string());
-    }
-
-    let request_fut = client.get(url).send();
-    let response_res = wait_for_download_step(
-        request_fut,
-        cancellation,
-        DOWNLOAD_STALL_TIMEOUT,
-        format!("Connection stalled while connecting to {url}"),
-    )
-    .await?;
-
-    let mut response = response_res
-        .map_err(|error| format!("Failed to request {url}: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("Failed to download {url}: {error}"))?;
-
-    let total = response.content_length();
-    if total.is_some_and(|total| total > max_bytes as u64) {
-        return Err(format!("Update asset exceeds the {max_bytes} byte limit."));
-    }
-
-    if let Some(app) = progress_app {
-        let _ = app.emit(
-            UPDATE_DOWNLOAD_PROGRESS_EVENT,
-            UpdateDownloadProgress {
-                downloaded: 0,
-                total,
-                attempt_id: attempt_id.into(),
-                version: version.into(),
-            },
-        );
-    }
-    let mut progress_gate = UpdateDownloadProgressGate::default();
-    progress_gate.should_emit(0, total);
-    let mut bytes = Vec::with_capacity(total.unwrap_or(0).min(max_bytes as u64) as usize);
-
-    loop {
-        if cancellation.is_canceled() {
-            return Err(DOWNLOAD_CANCELED_ERROR.to_string());
-        }
-
-        let chunk_fut = response.chunk();
-        let chunk_res = wait_for_download_step(
-            chunk_fut,
-            cancellation,
-            DOWNLOAD_STALL_TIMEOUT,
-            format!("Download stalled: no data received for 15 seconds from {url}"),
-        )
-        .await?;
-
-        let chunk = match chunk_res {
-            Ok(Some(chunk)) => chunk,
-            Ok(None) => break,
-            Err(error) => return Err(format!("Failed while downloading {url}: {error}")),
-        };
-
-        if bytes.len().saturating_add(chunk.len()) > max_bytes {
-            return Err(format!("Update asset exceeds the {max_bytes} byte limit."));
-        }
-        bytes.extend_from_slice(&chunk);
-        if progress_gate.should_emit(bytes.len() as u64, total) {
-            if let Some(app) = progress_app {
-                let _ = app.emit(
-                    UPDATE_DOWNLOAD_PROGRESS_EVENT,
-                    UpdateDownloadProgress {
-                        downloaded: bytes.len() as u64,
-                        total,
-                        attempt_id: attempt_id.into(),
-                        version: version.into(),
-                    },
-                );
-            }
-        }
-    }
-    Ok(bytes)
-}
-
 async fn wait_for_progressing_download<T>(
     download: impl Future<Output = Result<T, String>>,
     mut progress: tokio::sync::mpsc::Receiver<()>,
@@ -884,126 +648,28 @@ pub fn install_downloaded_update(
         }
     };
     let ready = &refreshed.ready;
-    let portable = matches!(ready, ReadyUpdate::Portable { .. });
     let install_result = match ready {
         ReadyUpdate::Installer { update, bytes } => update
             .install(bytes)
             .map_err(|error| format!("Failed to install update: {error}")),
-        ReadyUpdate::Portable { archive, version } => {
-            update_portable::ensure_portable_version_is_newer(version, env!("CARGO_PKG_VERSION"))
-                .and_then(|_| update_portable::launch_portable_update_helper(archive, version))
-        }
     };
     if let Err(error) = install_result {
         state.restore_ready(cached)?;
         return Err(error);
     }
-    if portable {
-        // The helper can still fail or roll back after this process exits. Keep
-        // the verified package until the upgraded application validates its version.
-        schedule_portable_update_exit(app);
-    } else {
-        state.finish_install()?;
-        let _ = update_cache::discard(&update_cache::root(&app)?);
-    }
+    state.finish_install()?;
+    let _ = update_cache::discard(&update_cache::root(&app)?);
     Ok(())
-}
-
-fn schedule_portable_update_exit(app: AppHandle) {
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(150)).await;
-        if let Some(state) = app.try_state::<crate::CloseBehaviorState>() {
-            state.allow_next_exit();
-        }
-        app.exit(0);
-    });
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        installer_asset_candidates, portable_asset_candidates, requires_manual_update, tag_version, updater_endpoints,
-        wait_for_download_step, wait_for_progressing_download, DownloadCancellation, PendingUpdateState,
-        UpdateDownloadProgressGate, DOWNLOAD_CANCELED_ERROR, GITHUB_RELEASE_DOWNLOAD_PREFIX, OFFICIAL_UPDATE_ENDPOINTS,
+        installer_asset_candidates, requires_manual_update, tag_version, updater_endpoints,
+        wait_for_progressing_download, DownloadCancellation, PendingUpdateState, UpdateDownloadProgressGate,
+        DOWNLOAD_CANCELED_ERROR, GITHUB_RELEASE_DOWNLOAD_PREFIX, OFFICIAL_UPDATE_ENDPOINTS,
     };
     use std::{future::pending, sync::Arc, time::Duration};
-
-    fn cached_fixture() -> super::CachedUpdate {
-        super::CachedUpdate {
-            record: super::CacheRecord {
-                schema_version: 1,
-                package_kind: "portable".into(),
-                package_length: 0,
-                package_sha256: super::update_cache::digest(&[]),
-                info: super::DownloadedUpdate {
-                    cache_id: "cached-id".into(),
-                    version: "99.0.0".into(),
-                    portable_mode: true,
-                    release_url: String::new(),
-                    release_notes: String::new(),
-                    downloaded_at: 0,
-                },
-                os: std::env::consts::OS.into(),
-                arch: std::env::consts::ARCH.into(),
-                manifest: None,
-                signature: None,
-            },
-            ready: super::ReadyUpdate::Portable {
-                archive: vec![],
-                version: semver::Version::new(99, 0, 0),
-            },
-        }
-    }
-
-    #[test]
-    fn stale_cache_identity_and_double_install_are_rejected() {
-        let state = PendingUpdateState::default();
-        state.restore_ready(cached_fixture()).unwrap();
-        assert!(state.take_ready("wrong-id", "99.0.0").is_err());
-        assert!(state.take_ready("cached-id", "98.0.0").is_err());
-        let ready = state.take_ready("cached-id", "99.0.0").unwrap();
-        assert!(state.take_ready("cached-id", "99.0.0").is_err());
-        state.restore_ready(ready).unwrap();
-        assert!(state.take_ready("cached-id", "99.0.0").is_ok());
-    }
-
-    #[test]
-    fn canceled_attempt_cannot_commit_or_publish_cache() {
-        let state = PendingUpdateState::default();
-        let attempt = state.begin_download().unwrap();
-        state.cancel_download();
-        let root = std::env::temp_dir().join(uuid::Uuid::new_v4().to_string());
-        assert!(state.finish_download(&attempt, cached_fixture(), &root).is_err());
-        assert!(!root.exists());
-        assert!(state.begin_download().is_ok());
-    }
-
-    #[test]
-    fn cleanup_failure_does_not_leave_ready_state_or_block_new_attempts() {
-        let state = PendingUpdateState::default();
-        state.restore_ready(cached_fixture()).unwrap();
-        let root = std::env::temp_dir().join(uuid::Uuid::new_v4().to_string());
-        // A file in place of the cache root makes deletion fail on every platform.
-        std::fs::write(&root, b"not a directory").unwrap();
-        assert!(state.discard_ready("cached-id", &root).is_err());
-        assert!(state.take_ready("cached-id", "99.0.0").is_err());
-        assert!(state.begin_download().is_ok());
-        std::fs::remove_file(root).unwrap();
-    }
-
-    #[test]
-    fn cache_target_requires_architecture_os_and_installation_type() {
-        let record = cached_fixture().record;
-        assert!(super::validate_cache_target(&record, true, "portable").is_ok());
-        assert!(super::validate_cache_target(&record, false, "portable").is_err());
-        assert!(super::validate_cache_target(&record, true, "nsis").is_err());
-        let mut wrong_arch = record.clone();
-        wrong_arch.arch = "different-architecture".into();
-        assert!(super::validate_cache_target(&wrong_arch, true, "portable").is_err());
-        let mut wrong_os = record;
-        wrong_os.os = "different-os".into();
-        assert!(super::validate_cache_target(&wrong_os, true, "portable").is_err());
-    }
 
     #[test]
     fn all_windows_7_builds_require_manual_updates() {
@@ -1026,20 +692,6 @@ mod tests {
                 .iter()
                 .map(|endpoint| endpoint.to_string())
                 .collect::<Vec<_>>()
-        );
-    }
-
-    #[test]
-    fn builds_signed_portable_asset_candidate() {
-        let candidates = portable_asset_candidates("0.5.64", "x86_64").unwrap();
-        assert_eq!(candidates.len(), 1);
-        assert_eq!(
-            candidates[0].archive_url,
-            format!("{GITHUB_RELEASE_DOWNLOAD_PREFIX}v0.5.64/MyApp_0.5.64_x64-portable.zip")
-        );
-        assert_eq!(
-            candidates[0].signature_url,
-            format!("{}.sig", candidates[0].archive_url)
         );
     }
 
@@ -1143,30 +795,6 @@ mod tests {
                 progress_rx,
                 &task_cancellation,
                 Duration::from_secs(30),
-            )
-            .await
-        });
-
-        tokio::task::yield_now().await;
-        cancellation.cancel();
-
-        let result = tokio::time::timeout(Duration::from_secs(1), task)
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(result.unwrap_err(), DOWNLOAD_CANCELED_ERROR);
-    }
-
-    #[tokio::test]
-    async fn cancel_wakes_portable_network_read_without_waiting_for_timeout() {
-        let cancellation = Arc::new(DownloadCancellation::default());
-        let task_cancellation = Arc::clone(&cancellation);
-        let task = tokio::spawn(async move {
-            wait_for_download_step(
-                pending::<()>(),
-                &task_cancellation,
-                Duration::from_secs(30),
-                "network timeout".to_string(),
             )
             .await
         });

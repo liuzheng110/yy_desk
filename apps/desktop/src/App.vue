@@ -7,6 +7,7 @@ import ErrorBoundary from "@/components/ErrorBoundary.vue";
 import ToastHost from "@/components/ToastHost.vue";
 import { useAppStore } from "@/stores/app";
 import { useUpdaterStore } from "@/stores/updater";
+import { APP_NAME } from "@/lib/identity";
 
 const route = useRoute();
 const app = useAppStore();
@@ -60,7 +61,7 @@ onBeforeUnmount(() => {
   <div class="shell">
     <!-- 细标题栏：左侧标题，右侧统一一排按钮（更新 / 设置 / 最小化 / 最大化 / 关闭） -->
     <div class="titlebar" data-tauri-drag-region>
-      <span class="title" data-tauri-drag-region>MyApp</span>
+      <span class="title" data-tauri-drag-region>{{ APP_NAME }}</span>
 
       <div class="titlebar-actions">
         <!-- 检查更新（图标按钮） -->
@@ -72,7 +73,7 @@ onBeforeUnmount(() => {
           }"
           :title="updater.title()"
           :aria-label="updater.title()"
-          :disabled="updater.state === 'checking' || updater.state === 'downloading'"
+          :disabled="updater.state === 'checking' || updater.state === 'downloading' || updater.installing"
           @click="updater.onClick"
         >
           <svg
@@ -207,6 +208,30 @@ onBeforeUnmount(() => {
               <rect x="14" y="14" width="7" height="7" rx="1" />
             </svg>
             <span>主功能</span>
+          </RouterLink>
+
+          <RouterLink to="/launcher" class="nav-item" active-class="active" title="启动管理">
+            <svg
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+            <span>启动管理</span>
+          </RouterLink>
+
+          <RouterLink to="/ports" class="nav-item" active-class="active" title="端口监测">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="12" rx="2" />
+              <path d="M8 21h8M12 15v6M6 9h3l2-3 2 6 2-3h3" />
+            </svg>
+            <span>端口监测</span>
           </RouterLink>
 
           <RouterLink to="/settings" class="nav-item" active-class="active" title="设置">

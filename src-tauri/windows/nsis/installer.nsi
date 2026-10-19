@@ -548,7 +548,9 @@ Function .onInit
       Quit
 
       dbx_open_win7_installer:
-        ExecShell "open" "https://github.com/liuzheng110/yy_desk/releases/tag/v${VERSION}"
+        !if "${HOMEPAGE}" != ""
+          ExecShell "open" "${HOMEPAGE}"
+        !endif
         SetErrorLevel 1633
         Quit
     ${EndIf}

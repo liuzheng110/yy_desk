@@ -15,8 +15,32 @@ export const APP_OPEN_DEEP_LINKS_EVENT = "myapp-open-deep-links";
 let frontendReady = false;
 
 export async function markFrontendReady(): Promise<void> {
-  frontendReady = true;
   await backend.markFrontendReady();
+  frontendReady = true;
+}
+
+/** Subscribe before mounting; roll back a partial subscription on failure. */
+export async function connectStartupEvents(): Promise<() => void> {
+  const cleanup: Array<() => void> = [];
+  const disconnect = () => {
+    cleanup.splice(0).forEach((unlisten) => unlisten());
+    frontendReady = false;
+  };
+  try {
+    cleanup.push(
+      await onAppCloseRequested(() => {
+        void backend.completeAppClose("quit").catch(console.error);
+      }),
+    );
+    // Business modules may subscribe separately. Never log user paths or
+    // deep-link query parameters: they can contain credentials.
+    cleanup.push(await onAppOpenFiles(() => {}));
+    cleanup.push(await onAppOpenDeepLinks(() => {}));
+    return disconnect;
+  } catch (error) {
+    disconnect();
+    throw error;
+  }
 }
 
 export function isFrontendReady(): boolean {

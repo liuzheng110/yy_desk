@@ -8,9 +8,9 @@ pub use app_platform::version::{is_newer_version, normalize_version, parse_versi
 
 use serde::{Deserialize, Serialize};
 
-const LATEST_JSON_GITHUB_PATH: &str = "https://github.com/liuzheng110/yy_desk/releases/latest/download/latest.json";
-const GITHUB_RELEASE_API_PREFIX: &str = "https://api.github.com/repos/liuzheng110/yy_desk/releases/tags/v";
-const RELEASE_URL_PREFIX: &str = "https://github.com/liuzheng110/yy_desk/releases/tag/v";
+use app_platform::identity::{
+    APP_NAME, GITHUB_RELEASE_API_PREFIX, RELEASE_URL_PREFIX, UPDATE_ENDPOINT as LATEST_JSON_GITHUB_PATH,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct TauriRelease {
@@ -109,7 +109,7 @@ pub fn build_update_info(release: TauriRelease, current_version: &str) -> Update
     let release_name = github
         .and_then(|metadata| non_empty(metadata.name.as_deref()))
         .map(ToOwned::to_owned)
-        .unwrap_or_else(|| format!("MyApp v{latest_version}"));
+        .unwrap_or_else(|| format!("{APP_NAME} v{latest_version}"));
     let release_url = github
         .and_then(|metadata| non_empty(metadata.html_url.as_deref()))
         .map(ToOwned::to_owned)
@@ -158,7 +158,7 @@ mod tests {
             notes: Some("See the assets below to download and install.".to_string()),
             github: Some(GithubReleaseMetadata {
                 name: Some("MyApp v0.1.3".to_string()),
-                html_url: Some("https://github.com/liuzheng110/yy_desk/releases/tag/v0.1.3".to_string()),
+                html_url: Some(format!("{}0.1.3", app_platform::identity::RELEASE_URL_PREFIX)),
                 body: Some("### 新功能\n\n真实发布说明".to_string()),
             }),
         };
@@ -168,7 +168,7 @@ mod tests {
         assert_eq!(info.release_name, "MyApp v0.1.3");
         assert_eq!(
             info.release_url,
-            "https://github.com/liuzheng110/yy_desk/releases/tag/v0.1.3"
+            format!("{}0.1.3", app_platform::identity::RELEASE_URL_PREFIX)
         );
         assert_eq!(info.release_notes, "### 新功能\n\n真实发布说明");
         assert!(!info.portable_mode);
@@ -186,7 +186,7 @@ mod tests {
 
         assert_eq!(
             info.release_url,
-            "https://github.com/liuzheng110/yy_desk/releases/tag/v0.1.3"
+            format!("{}0.1.3", app_platform::identity::RELEASE_URL_PREFIX)
         );
         assert_eq!(info.release_notes, "### 新功能\n\n真实发布说明");
     }

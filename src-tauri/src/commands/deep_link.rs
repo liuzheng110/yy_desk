@@ -8,7 +8,7 @@
 
 use std::sync::Mutex;
 
-const APP_SCHEME: &str = "myapp://";
+use app_platform::identity::APP_SCHEME;
 
 #[derive(Default)]
 pub struct DeepLinkOpenState {
@@ -73,7 +73,7 @@ pub fn parse_deep_link(link: String) -> Result<DeepLink, String> {
         query.insert(key, value);
     }
     Ok(DeepLink {
-        scheme: "myapp".to_string(),
+        scheme: APP_SCHEME.trim_end_matches("://").to_string(),
         path,
         query,
     })

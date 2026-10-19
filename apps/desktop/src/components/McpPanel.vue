@@ -253,7 +253,7 @@ onMounted(load);
             <span :class="['badge', r.ok ? 'ok' : 'err']">{{ r.ok ? "成功" : "失败" }}</span>
             <code>{{ r.server }}</code>
             <template v-if="r.ok">：缓存 {{ r.toolCount }} 个工具</template>
-            <template v-else class="muted">：{{ r.error }}</template>
+            <span v-else class="muted">：{{ r.error }}</span>
           </li>
         </ul>
       </div>

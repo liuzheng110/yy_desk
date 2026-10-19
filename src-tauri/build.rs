@@ -4,10 +4,23 @@ fn main() {
         panic!("Windows 7 release builds must enable the custom-protocol feature");
     }
 
-    // Force rebuild to re-embed frontend assets and the Windows icon resource.
-    // (touched 2026-10-10 v2: icon regenerated via `tauri icon`; re-embed new dist
-    //  for close/quit fix — the previous exe still embedded the OLD frontend
-    //  because only lib.rs was touched, build.rs did not rerun.
-    //  v2: dist/index.html carries embed-marker-2026-10-10-dist-v2)
-    tauri_build::build()
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
+        && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
+    {
+        // Tauri's resource is linked to application binaries, but lib test
+        // executables also import TaskDialogIndirect (Common Controls v6).
+        // Embed the same manifest through the linker for every executable.
+        let manifest =
+            std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap()).join("windows/app.manifest.xml");
+        println!("cargo:rerun-if-changed={}", manifest.display());
+        println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
+        println!("cargo:rustc-link-arg=/MANIFESTINPUT:{}", manifest.display());
+        tauri_build::try_build(
+            tauri_build::Attributes::new()
+                .windows_attributes(tauri_build::WindowsAttributes::new_without_app_manifest()),
+        )
+        .expect("Failed to build application resources");
+    } else {
+        tauri_build::build();
+    }
 }

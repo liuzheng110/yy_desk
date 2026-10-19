@@ -26,8 +26,19 @@ type SharedGateway = Arc<GatewayHandle>;
 /// Start the gateway HTTP server on 127.0.0.1:port. Returns the bind error if
 /// the port is already taken, otherwise a join handle for the server task.
 pub async fn spawn_server(gateway: SharedGateway, port: u16) -> anyhow::Result<tokio::task::JoinHandle<()>> {
-    let app = Router::new().route("/mcp", post(handle_post)).with_state(gateway);
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
+    let bound_port = listener.local_addr()?.port();
+    let app = Router::new()
+        .route("/mcp", post(handle_post))
+        .with_state(gateway)
+        .layer(axum::middleware::from_fn(
+            move |request: axum::extract::Request, next: axum::middleware::Next| async move {
+                if !local_request_allowed(request.headers(), bound_port) {
+                    return StatusCode::FORBIDDEN.into_response();
+                }
+                next.run(request).await
+            },
+        ));
     log::info!("MCP gateway listening on http://127.0.0.1:{port}/mcp");
     let handle = tokio::spawn(async move {
         if let Err(e) = axum::serve(listener, app).await {
@@ -35,6 +46,55 @@ pub async fn spawn_server(gateway: SharedGateway, port: u16) -> anyhow::Result<t
         }
     });
     Ok(handle)
+}
+
+// Native MCP clients do not send Origin. Browser requests must originate from
+// this loopback endpoint; arbitrary Host values are rejected against DNS rebinding.
+fn local_request_allowed(headers: &HeaderMap, port: u16) -> bool {
+    let hosts = [format!("127.0.0.1:{port}"), format!("localhost:{port}")];
+    let Some(host) = headers.get(header::HOST).and_then(|value| value.to_str().ok()) else {
+        return false;
+    };
+    if !hosts.iter().any(|allowed| host.eq_ignore_ascii_case(allowed)) {
+        return false;
+    }
+    match headers.get(header::ORIGIN) {
+        None => true,
+        Some(origin) => origin.to_str().ok().is_some_and(|origin| {
+            hosts
+                .iter()
+                .any(|host| origin.eq_ignore_ascii_case(&format!("http://{host}")))
+        }),
+    }
+}
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+
+    #[test]
+    fn native_loopback_clients_remain_supported() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::HOST, "127.0.0.1:9876".parse().unwrap());
+        assert!(local_request_allowed(&headers, 9876));
+        headers.insert(header::ORIGIN, "http://localhost:9876".parse().unwrap());
+        assert!(local_request_allowed(&headers, 9876));
+    }
+
+    #[test]
+    fn reject_web_origins_rebinding_hosts_and_wrong_ports() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::HOST, "127.0.0.1:9876".parse().unwrap());
+        for origin in ["https://evil.example", "null", "http://localhost:9877"] {
+            headers.insert(header::ORIGIN, origin.parse().unwrap());
+            assert!(!local_request_allowed(&headers, 9876));
+        }
+        headers.remove(header::ORIGIN);
+        headers.insert(header::HOST, "evil.example:9876".parse().unwrap());
+        assert!(!local_request_allowed(&headers, 9876));
+        headers.remove(header::HOST);
+        assert!(!local_request_allowed(&headers, 9876));
+    }
 }
 
 /// Convenience: load config, start the server, return port actually bound.

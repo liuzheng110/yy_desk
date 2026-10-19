@@ -16,13 +16,13 @@ myapp/
 ├── src-tauri/             # Tauri 桌面壳
 │   ├── src/
 │   │   ├── lib.rs         # run() 启动流程 + invoke 注册表
-│   │   ├── data_dir.rs    # 数据目录三模式：默认 / 环境变量(MYAPP_DATA_DIR) / 便携(portable.myapp)
+│   │   ├── data_dir.rs    # 数据目录：默认 / 环境变量(MYAPP_DATA_DIR)
 │   │   ├── startup_recovery.rs    # 启动看门狗（60s 探测 + 恢复）
 │   │   ├── webview2_recovery.rs   # WebView2 渲染进程崩溃恢复
 │   │   ├── migration_gate.rs      # 迁移门槛（白名单命令 gate）
 │   │   ├── window_state_guard.rs  # 主窗口边界守护
 │   │   └── commands/      # IPC 命令
-│   │       ├── update*.rs         # 自动更新（GitHub Releases + minisign 验签 + 便携包）
+│   │       ├── update*.rs         # 自动更新（GitHub Releases + minisign 验签 + 已下载包缓存）
 │   │       ├── app_settings.rs    # 桌面/外观/语言/关闭行为/标签页设置
 │   │       ├── deep_link.rs       # myapp:// 深链接
 │   │       ├── window_controls.rs # 窗口控制
@@ -44,6 +44,19 @@ myapp/
 ├── scripts/               # dev / check / release / sync-version 脚本
 └── .github/workflows/release.yml  # tag v* → Windows 构建并正式发布 Release
 ```
+
+
+## 底座复用与发布校验
+
+应用公开身份以 `src-tauri/tauri.conf.json` 为准：`productName`、`identifier`、深链接 `schemes`、updater 的公钥与 endpoint。Rust 编译时生成共享常量，前端只注入公开显示名；更新检查、下载、发布日志、自启动和启动恢复读取同一份身份。当前更新后端支持一个 GitHub `latest.json` 地址。
+
+派生新应用时，使用独立 identifier、名称、协议名、GitHub 更新仓库和签名密钥。不要给已有应用随意更换 identifier 或公钥：前者改变数据目录，后者需要设计密钥轮换过渡。版本仍由 `pnpm sync-version` 同步。发布流水线拒绝标签/版本不一致或更新地址仍指向其他仓库的构建。
+
+`pnpm validate` 检查版本、应用身份、候选公开文件、lint、格式、前端回归测试、生产前端构建以及 Rust workspace 单元测试。`pnpm check` 保留为快速编译检查。普通主分支提交和 PR 会跑检查；推送版本标签后先跑相同检查，再构建签名草稿，下载已上传资产并用内置公钥验签，全部成功才自动发布为 latest。失败草稿不会被客户端更新地址选中。
+
+`pnpm check:public` 检查 Git 跟踪及未忽略文件中的常见凭据和私人配置文件名，只报告位置，不打印密钥内容。这是误提交防线，不是完整秘密扫描器；提交前仍应检查差异。私钥放 `.signing/`，CI 私钥只放仓库 Secret。数据目录中的 `mcp-servers.json`、`launch-items.json`、数据库及其备份不应提交或打包。全新安装的启动列表为空；格式参考 `launch-items.example.json`，已有本机配置不受影响。
+
+底座仍使用轻量设置存储，尚未实现业务表的版本迁移和升级后自动回滚。引入正式业务数据前，应为该应用设计迁移和恢复策略。当前版本不提供便携安装模式；此前使用便携目录的用户需要单独迁移，不能直接把旧目录识别逻辑移除当作数据迁移。
 
 ## 快速开始
 
@@ -73,10 +86,10 @@ pnpm tauri build
 
 | 机制 | 组成 | 位置 |
 | --- | --- | --- |
-| 自动更新 | updater 插件 + GitHub Releases(latest.json) + minisign 验签 + 下载进度事件 + 便携包(zip+sig) | `src-tauri/src/commands/update*.rs`、`crates/app-core/src/update.rs`、`crates/app-platform/src/download.rs` |
+| 自动更新 | updater 插件 + GitHub Releases(latest.json) + minisign 验签 + 下载进度事件 + 缓存恢复与安装前复验 | `src-tauri/src/commands/update*.rs`、`crates/app-core/src/update.rs`、`crates/app-platform/src/download.rs` |
 | 安装打包 | 仅 Windows：NSIS(currentUser)，`createUpdaterArtifacts: true` 生成 latest.json | `src-tauri/tauri.conf.json`、`windows/nsis/installer.nsi` |
 | 启动机制 | 单实例 + 深链接(myapp://) + 二次启动文件交接 + 启动看门狗 + WebView2 崩溃恢复 + 窗口状态 | `src-tauri/src/lib.rs`、`startup_recovery.rs`、`webview2_recovery.rs` |
-| 运行机制 | 托盘(显示/退出) + 关闭行为状态机(前端确认后退出) + 数据目录三模式 + 迁移门槛 + 调试日志 | `lib.rs`、`data_dir.rs`、`migration_gate.rs` |
+| 运行机制 | 托盘(显示/退出) + 关闭行为状态机(前端确认后退出) + 默认/环境变量数据目录 + 迁移门槛 + 调试日志 | `lib.rs`、`data_dir.rs`、`migration_gate.rs` |
 
 ## 保留的基础能力
 
@@ -112,6 +125,14 @@ MyApp 内置一个 **MCP 网关**（默认 `http://127.0.0.1:9876/mcp`，Streama
 - **Meta 模式（可选）**：`metaMode: true` 时只暴露 4 个 `gateway_*` 元工具（search/list/invoke/servers），后端很多时避免工具清单撑爆上下文。
 
 接入步骤与配置格式见 [`MCP代理-Codex接入指南.md`](./MCP代理-Codex接入指南.md)。应用内置 **MCP 管理面板**（主界面下方）：查看网关状态 / 服务器列表 / 状态徽标（正常/故障/熔断/停用）/ 工具缓存，一键「刷新工具列表」「重载配置」「停用/恢复」；后端命令 `mcp_status` / `mcp_reload_config` / `mcp_refresh_tools` / `mcp_kill_server` / `mcp_revive_server` 亦可直接调用。
+
+## 本机端口监测
+
+侧边栏「端口监测」自动读取 Windows 本机全部 TCP 监听端口和 UDP 绑定地址，无需指定端口或登记启动项，也能发现其他 Agent 或终端启动的前后端。支持按端口、PID、进程名、路径搜索，按协议与疑似开发服务筛选，页面打开时每 10 秒自动刷新。
+
+同一进程的端口合并展示，附程序路径、启动命令、父 PID 和根据路径推断的项目目录。开发服务分类与目录仅作线索，不能据此确定启动者是 Agent；相对路径命令或无法读取的进程可能无法识别项目。浏览器预览不具备扫描能力。
+
+「停止进程」立即结束指定进程并释放其全部端口；勾选多个进程可以一起停止前后端（最多 64 个）。后端重新扫描并通过同一 Windows 进程句柄验证 PID 与创建时间，避免 PID 复用造成误停。系统服务、Windows 系统目录下的进程、应用自身及祖先进程、身份无法验证的进程禁止停止。不会按名称批量结束同名程序，也不会自动结束父进程或进程树；由 watcher、容器或守护程序管理的服务可能自动重启，需要在对应启动器中停止。扫描/停止权限不足会显示错误，不自动提升权限。
 
 ## 写你的业务
 
@@ -150,11 +171,11 @@ pnpm sync-version --check # 只校验四处版本是否一致（不一致退出�
 
 ## 发布
 
-流水线在 [`.github/workflows/release.yml`](./.github/workflows/release.yml)：推送 `v*` 标签后，在 `windows-2022` 上构建 **Windows NSIS 安装包 + 便携包**，产出 `latest.json` 更新清单并**直接正式发布**（非草稿）。客户端启动后会自动检查该 Release，弹提示后点一下即可完成更新。
+流水线在 [`.github/workflows/release.yml`](./.github/workflows/release.yml)：推送 `v*` 标签后，在 `windows-2022` 上构建 **Windows NSIS 安装包**，产出 `latest.json` 更新清单并**先构建草稿，校验上传的安装包与更新元数据后自动正式发布**。客户端启动后会自动检查该 Release，弹提示后点一下即可完成更新。
 
 ```bash
-# 1) 本地校验（可选）
-pnpm check
+# 1) 本地完整校验（发布流水线也会强制执行）
+pnpm validate
 
 # 2) 同步版本号（4 个文件保持一致）
 pnpm sync-version 0.2.0
@@ -168,7 +189,7 @@ git push origin v0.2.0
 
 | Secret | 说明 |
 | --- | --- |
-| `TAURI_SIGNING_PRIVATE_KEY` | minisign 私钥内容（`.signing/myapp.key` 的文本内容），用于给 `latest.json` 与安装包签名 |
+| `TAURI_SIGNING_PRIVATE_KEY` | minisign 私钥内容（`.signing/myapp.key` 的文本内容），用于给安装包签名；`latest.json` 携带签名，清单本身不单独签名 |
 
 > 密钥已按**无口令**生成，因此不需要 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。
 
@@ -177,7 +198,7 @@ git push origin v0.2.0
 本地构建需要签名时，设置环境变量后运行 `pnpm tauri build`：
 
 ```powershell
-$env:TAURI_SIGNING_PRIVATE_KEY = "C:\AI_workspace\yy_desk\myapp\.signing\myapp.key"  # 私钥文件路径（或密钥内容）
+$env:TAURI_SIGNING_PRIVATE_KEY = "C:\path\to\myapp\.signing\myapp.key"  # 私钥文件路径（或密钥内容）
 pnpm tauri build
 ```
 
@@ -188,7 +209,7 @@ pnpm tauri build
 
 ## 说明
 
-- **窗口控制按钮（最小化/最大化/关闭）由前端标题栏自绘**（`apps/desktop/src/App.vue` 的 `.window-controls`）：框架沿用 dbx 的 Overlay 无边框标题栏，Windows 原生按钮被隐藏，必须由前端补齐；关闭按钮走框架关闭状态机（默认隐藏到托盘）。业务替换 `App.vue` 时保留这段标题栏即可。
+- **窗口控制按钮（最小化/最大化/关闭）由前端标题栏自绘**（`apps/desktop/src/App.vue` 的 `.window-controls`）：框架沿用 dbx 的 Overlay 无边框标题栏，Windows 原生按钮被隐藏，必须由前端补齐；关闭按钮走框架关闭状态机（当前默认退出应用）。业务替换 `App.vue` 时保留这段标题栏即可。
 - **构建正式版/安装包必须用 `pnpm tauri build`（tauri CLI 会注入正式构建标记）。不要直接用 `cargo build --release` 构建 `src-tauri`**——那样 tauri-build 会把它编译成**开发模式**，窗口会加载 `localhost:1420`（没有本地 dev server 时显示"无法访问此页面"）。分发的 exe 一律从 `tauri build` 的产物（`target\release\bundle\` 或 `target\release\myapp.exe`）取。
-- 本框架沿用了 dbx 的"关闭=隐藏到托盘"交互，退出请用托盘图标右键 → 退出，不要直接强杀进程（强杀可能残留 single-instance 管道，导致下一次启动窗口被恢复到屏幕外不可见；若遇到"双击没反应/窗口不见了"，先到任务管理器结束残留的 MyApp 进程再启动）。
+- 当前关闭按钮与托盘退出均走正常退出流程，避免直接强杀进程（强杀可能残留 single-instance 管道，导致下一次启动窗口被恢复到屏幕外不可见；若遇到"双击没反应/窗口不见了"，先到任务管理器结束残留的 MyApp 进程再启动）。
 - 依赖 dbx 的 Apache-2.0 许可，使用/分发时请保留相应版权声明。

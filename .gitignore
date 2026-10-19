@@ -31,6 +31,25 @@ logs/
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
+!.env.*.example
+
+# Local runtime data and credentials (example configs remain tracked)
+/data/
+app.db
+app.db-*
+app.db.*
+mcp-servers.json
+mcp-servers.json.*
+mcp-tools-cache.json
+mcp-tools-cache.json.*
+launch-items.json
+launch-items.json.*
+*.key
+*.key.bak
+*.p12
+*.pfx
 
 # Updater signing keys (never commit private keys)
 .signing/

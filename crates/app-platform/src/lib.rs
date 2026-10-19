@@ -1,3 +1,4 @@
+pub mod identity;
 pub mod path_utils;
 pub mod process;
 pub mod proxy;

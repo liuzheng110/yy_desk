@@ -17,7 +17,7 @@ const NO_SANDBOX_ENV: &str = "MYAPP_WEBVIEW2_NO_SANDBOX";
 const RECOVERY_ATTEMPT_ENV: &str = "MYAPP_STARTUP_COMPAT_RECOVERY";
 const RECOVERY_PARENT_PID_ENV: &str = "MYAPP_STARTUP_COMPAT_PARENT_PID";
 const DISABLE_ENTERPRISE_COMPAT_ENV: &str = "MYAPP_DISABLE_ENTERPRISE_COMPAT";
-const WINDOWS_APP_DATA_DIR_NAME: &str = "com.myapp.app";
+const WINDOWS_APP_DATA_DIR_NAME: &str = app_platform::identity::APP_ID;
 const COMPATIBILITY_MARKER_FILE: &str = "webview2-enterprise-compat.enabled";
 const COMPATIBILITY_PROFILE_DIR: &str = "webview2-enterprise-compat";
 const STARTUP_LOG_BUFFER_CAPACITY: usize = 256;
@@ -638,7 +638,7 @@ mod tests {
     fn startup_log_uses_windows_appdata() {
         assert_eq!(
             startup_log_dir_from_inputs("windows", None, Some(OsString::from(r"C:\Users\test\AppData\Roaming")),),
-            Some(PathBuf::from(r"C:\Users\test\AppData\Roaming").join("com.myapp.app"))
+            Some(PathBuf::from(r"C:\Users\test\AppData\Roaming").join(app_platform::identity::APP_ID))
         );
     }
 
@@ -660,7 +660,7 @@ mod tests {
             compatibility_marker_path_from_appdata(Some(OsString::from(r"C:\Users\test\AppData\Roaming"))),
             Some(
                 PathBuf::from(r"C:\Users\test\AppData\Roaming")
-                    .join("com.myapp.app")
+                    .join(app_platform::identity::APP_ID)
                     .join("webview2-enterprise-compat.enabled")
             )
         );
@@ -672,7 +672,7 @@ mod tests {
             (
                 Some(
                     PathBuf::from(r"C:\Users\test\AppData\Local")
-                        .join("com.myapp.app")
+                        .join(app_platform::identity::APP_ID)
                         .join("webview2-enterprise-compat")
                 ),
                 "local_appdata",

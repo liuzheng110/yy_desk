@@ -4,6 +4,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { backend, UPDATE_DOWNLOAD_PROGRESS_EVENT } from "@/lib/backend";
 import type { DownloadedUpdate, UpdateDownloadProgress, UpdateInfo } from "@/lib/backend";
 import { useAppStore } from "./app";
+import { APP_NAME } from "@/lib/identity";
 
 export type UpdateState = "idle" | "checking" | "available" | "downloading" | "downloaded" | "none";
 
@@ -26,6 +27,7 @@ export const useUpdaterStore = defineStore("updater", () => {
   const error = ref("");
   const progress = ref<{ downloaded: number; total: number | null } | null>(null);
   const installing = ref(false);
+  const initializing = ref(false);
   // 手动检查的结果反馈（已是最新 / 检查失败），避免“点了没反应”
   const notice = ref<{ kind: "info" | "error"; text: string } | null>(null);
 
@@ -33,6 +35,8 @@ export const useUpdaterStore = defineStore("updater", () => {
   let autoCheckTimer: number | null = null;
   let noticeTimer: number | null = null;
   let started = false;
+  let lifecycle = 0;
+  let activeAttempt: { id: string; version: string } | null = null;
 
   const bannerVisible = computed(
     () => !dismissed.value && ["available", "downloading", "downloaded"].includes(state.value),
@@ -72,7 +76,15 @@ export const useUpdaterStore = defineStore("updater", () => {
   }
 
   async function check(manual = false) {
-    if (state.value === "checking" || state.value === "downloading") return;
+    if (initializing.value || installing.value || state.value === "checking" || state.value === "downloading") return;
+    if (cached.value) {
+      state.value = "downloaded";
+      if (manual) {
+        dismissed.value = false;
+        showNotice("info", `版本 ${cached.value.version} 已下载，可点击更新按钮继续安装。`);
+      }
+      return;
+    }
     state.value = "checking";
     error.value = "";
     if (manual) dismissNotice();
@@ -89,23 +101,24 @@ export const useUpdaterStore = defineStore("updater", () => {
       console.error("[UPDATE] check failed", err);
       error.value = String(err);
       state.value = "idle";
-      showNotice("error", `检查更新失败：${String(err)}`);
+      if (manual) showNotice("error", `检查更新失败：${String(err)}`);
     }
   }
 
   // 启动时先看缓存里是否已有校验通过的更新包，避免重复下载。
-  async function restore(): Promise<boolean> {
+  async function restore(generation = lifecycle): Promise<boolean> {
     try {
       const found = await backend.getDownloadedUpdate();
-      if (!found) return false;
+      if (generation !== lifecycle) return false;
       cached.value = found;
+      if (!found) return false;
       info.value = {
         current_version: app.version,
         latest_version: found.version,
         update_available: true,
         portable_mode: found.portable_mode,
         manual_update_only: false,
-        release_name: `MyApp v${found.version}`,
+        release_name: `${APP_NAME} v${found.version}`,
         release_url: found.release_url,
         release_notes: found.release_notes,
       };
@@ -119,7 +132,7 @@ export const useUpdaterStore = defineStore("updater", () => {
 
   async function install() {
     const target = cached.value;
-    if (!target) return;
+    if (!target || installing.value || initializing.value) return;
     installing.value = true;
     error.value = "";
     try {
@@ -128,19 +141,37 @@ export const useUpdaterStore = defineStore("updater", () => {
     } catch (err) {
       console.error("[UPDATE] install failed", err);
       error.value = String(err);
+      // A failed revalidation can evict the backend cache. Reconcile before
+      // offering retry so the UI cannot stay stuck on a nonexistent package.
+      if (!(await restore())) {
+        cached.value = null;
+        state.value = info.value?.update_available ? "available" : "idle";
+      }
+    } finally {
       installing.value = false;
     }
   }
 
   async function downloadAndInstall() {
+    if (initializing.value || installing.value || state.value !== "available") return;
+    if (cached.value) {
+      state.value = "downloaded";
+      await install();
+      return;
+    }
     const target = info.value;
     if (!target) return;
     state.value = "downloading";
     error.value = "";
     progress.value = { downloaded: 0, total: null };
     dismissed.value = false;
+    activeAttempt = { id: attemptId(), version: target.latest_version.replace(/^v/, "") };
     try {
-      const downloaded = await backend.downloadUpdate(target.latest_version, attemptId(), target.release_notes || "");
+      const downloaded = await backend.downloadUpdate(
+        target.latest_version,
+        activeAttempt.id,
+        target.release_notes || "",
+      );
       cached.value = downloaded;
       state.value = "downloaded";
       await install();
@@ -148,6 +179,8 @@ export const useUpdaterStore = defineStore("updater", () => {
       console.error("[UPDATE] download failed", err);
       error.value = String(err);
       state.value = "available";
+    } finally {
+      activeAttempt = null;
     }
   }
 
@@ -160,7 +193,7 @@ export const useUpdaterStore = defineStore("updater", () => {
   }
 
   async function onClick() {
-    if (state.value === "checking" || state.value === "downloading") return;
+    if (initializing.value || installing.value || state.value === "checking" || state.value === "downloading") return;
     dismissed.value = false;
     if (state.value === "available") {
       await downloadAndInstall();
@@ -198,18 +231,45 @@ export const useUpdaterStore = defineStore("updater", () => {
   async function start() {
     if (started || !isTauri) return;
     started = true;
-    await app.init();
-    unlistenProgress = await listen<UpdateDownloadProgress>(UPDATE_DOWNLOAD_PROGRESS_EVENT, (event) => {
-      progress.value = { downloaded: event.payload.downloaded, total: event.payload.total };
-    });
-    if (await restore()) return;
-    autoCheckTimer = window.setTimeout(() => {
-      void check();
-    }, AUTO_CHECK_DELAY_MS);
+    initializing.value = true;
+    const generation = ++lifecycle;
+    try {
+      await app.init();
+      if (generation !== lifecycle) return;
+      const unlisten = await listen<UpdateDownloadProgress>(UPDATE_DOWNLOAD_PROGRESS_EVENT, (event) => {
+        if (
+          generation !== lifecycle ||
+          !activeAttempt ||
+          event.payload.attempt_id !== activeAttempt.id ||
+          event.payload.version !== activeAttempt.version
+        )
+          return;
+        progress.value = { downloaded: event.payload.downloaded, total: event.payload.total };
+      });
+      if (generation !== lifecycle) {
+        unlisten();
+        return;
+      }
+      unlistenProgress = unlisten;
+      if (await restore(generation)) return;
+      if (generation !== lifecycle) return;
+      autoCheckTimer = window.setTimeout(() => {
+        void check();
+      }, AUTO_CHECK_DELAY_MS);
+    } catch (err) {
+      if (generation === lifecycle) {
+        stop();
+        error.value = String(err);
+      }
+    } finally {
+      if (generation === lifecycle) initializing.value = false;
+    }
   }
 
   /** 卸载时调用：释放事件订阅与定时器。 */
   function stop() {
+    lifecycle += 1;
+    initializing.value = false;
     unlistenProgress?.();
     unlistenProgress = null;
     if (autoCheckTimer !== null) {
@@ -231,6 +291,7 @@ export const useUpdaterStore = defineStore("updater", () => {
     error,
     progress,
     installing,
+    initializing,
     notice,
     bannerVisible,
     actionable,

@@ -1,6 +1,6 @@
 {
   "name": "myapp",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -22,7 +22,10 @@
     "sync-version": "node scripts/sync-version.mjs",
     "tauri": "tauri",
     "release": "node scripts/release.mjs",
-    "test:release": "node --test scripts/release.test.mjs"
+    "test": "node --test scripts/test/foundation.test.mjs",
+    "check:public": "node scripts/check-public-files.mjs",
+    "check:identity": "node scripts/check-app-config.mjs",
+    "validate": "pnpm sync-version --check && pnpm check:identity && pnpm check:public && pnpm lint && pnpm format:check && pnpm fmt:rs:check && pnpm test && pnpm build:checked && cargo test --workspace --lib --locked"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.0",

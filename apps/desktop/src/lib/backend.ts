@@ -40,6 +40,45 @@ export interface UpdateDownloadProgress {
 
 export const UPDATE_DOWNLOAD_PROGRESS_EVENT = "update-download-progress";
 
+export interface LaunchItem {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  workdir: string | null;
+  process_name: string | null;
+  window_title: string | null;
+  port: number | null;
+  url: string | null;
+  stop_command: string | null;
+  stop_args: string[];
+  enabled: boolean;
+}
+
+export interface LaunchStatus {
+  id: string;
+  running: boolean;
+}
+
+export interface PortProcess {
+  pid: number;
+  name: string;
+  executable: string;
+  command_line: string;
+  parent_pid: number;
+  started_at: string;
+  protected_reason: string;
+  endpoints: { protocol: "TCP" | "UDP"; address: string; port: number }[];
+  project_path: string | null;
+  development: boolean;
+}
+
+export interface PortStopResult {
+  pid: number;
+  stopped: boolean;
+  message: string;
+}
+
 export const backend = {
   // 设置
   loadDesktopSettings: () => invoke<DesktopSettings>("load_desktop_settings"),
@@ -55,6 +94,17 @@ export const backend = {
   // 开机自启动
   getAutostartEnabled: () => invoke<boolean>("get_autostart_enabled"),
   setAutostartEnabled: (enabled: boolean) => invoke<void>("set_autostart_enabled", { enabled }),
+
+  // 启动管理
+  listLaunchItems: () => invoke<LaunchItem[]>("list_launch_items"),
+  launchItem: (id: string) => invoke<"started" | "focused">("launch_item", { id }),
+  stopLaunchItem: (id: string) => invoke<"stopped">("stop_launch_item", { id }),
+  listLaunchStatuses: () => invoke<LaunchStatus[]>("list_launch_statuses"),
+
+  // 本机端口监测（不要求预先登记启动项）
+  scanLocalPorts: () => invoke<PortProcess[]>("scan_local_ports"),
+  stopPortProcesses: (targets: Pick<PortProcess, "pid" | "started_at">[]) =>
+    invoke<PortStopResult[]>("stop_port_processes", { targets }),
 
   // 更新
   checkForUpdates: () => invoke<UpdateInfo>("check_for_updates"),

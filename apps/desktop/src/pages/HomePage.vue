@@ -19,10 +19,10 @@ const app = useAppStore();
       <div class="card">
         <h3>四大机制已保留</h3>
         <ul>
-          <li>自动更新（updater 插件 + GitHub Releases + minisign 验签 + 便携包）</li>
+          <li>自动更新（updater 插件 + GitHub Releases + minisign 验签）</li>
           <li>安装打包（NSIS，<code>createUpdaterArtifacts: true</code> 生成 latest.json）</li>
           <li>启动机制（单实例 / 深链接 / 启动看门狗 / WebView2 崩溃恢复 / 窗口状态）</li>
-          <li>运行机制（托盘 / 关闭行为状态机 / 数据目录三模式 / 迁移门槛）</li>
+          <li>运行机制（托盘 / 关闭行为状态机 / 数据目录 / 迁移门槛）</li>
         </ul>
       </div>
       <div class="card">

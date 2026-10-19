@@ -470,6 +470,17 @@ body {
   color: var(--on-primary);
 }
 
+.tb-btn.danger {
+  border-color: var(--err-border);
+  color: var(--err-text);
+}
+
+.tb-btn.danger:hover:not(:disabled) {
+  background: var(--err-bg);
+  border-color: var(--err-text);
+  color: var(--err-text);
+}
+
 .tb-btn.small-btn {
   padding: 3px 10px;
   font-size: 12px;

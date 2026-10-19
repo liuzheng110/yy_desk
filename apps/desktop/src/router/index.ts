@@ -22,6 +22,18 @@ export const routes: RouteRecordRaw[] = [
     component: () => import("@/pages/McpConfigPage.vue"),
     meta: { title: "MCP 配置" },
   },
+  {
+    path: "/launcher",
+    name: "launcher",
+    component: () => import("@/pages/LauncherPage.vue"),
+    meta: { title: "启动管理" },
+  },
+  {
+    path: "/ports",
+    name: "ports",
+    component: () => import("@/pages/PortsPage.vue"),
+    meta: { title: "端口监测" },
+  },
   // 未知路径统一回到首页，避免桌面端出现空白页
   { path: "/:pathMatch(.*)*", redirect: "/" },
 ];

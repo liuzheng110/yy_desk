@@ -1,7 +1,7 @@
 //! 发布资产下载：统一走 GitHub Releases。
 //! 单一发布源（GitHub），`race_download_urls` 可在需要时扩展为多镜像竞速。
 
-pub const GITHUB_RELEASE_DOWNLOAD_PREFIX: &str = "https://github.com/liuzheng110/yy_desk/releases/download/";
+pub use crate::identity::GITHUB_RELEASE_DOWNLOAD_PREFIX;
 
 use std::pin::Pin;
 
@@ -47,7 +47,10 @@ mod tests {
     fn github_release_prefix_points_at_this_repo() {
         assert_eq!(
             GITHUB_RELEASE_DOWNLOAD_PREFIX,
-            "https://github.com/liuzheng110/yy_desk/releases/download/"
+            format!(
+                "https://github.com/{}/releases/download/",
+                crate::identity::GITHUB_REPOSITORY
+            )
         );
     }
 }

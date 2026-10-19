@@ -10,6 +10,7 @@
 //! - 应用图标（2026-10-10 v2：主体放大至画布 95%，嵌入 regenerated icon set）
 //! - UI v3（2026-10-10：细标题栏、右侧按钮并排、左侧导航 + 设置功能页）
 //! - 图标 v3（2026-10-10：主体放大至 97%，多帧 icon.ico 16-256）
+//! - 启动管理 v2（2026-10-18：支持端口探测状态 + URL 打开页面的 web 服务类启动项）
 //!
 //! 数据库业务命令已全部移除；你的业务命令放在 `commands/business/`。
 
@@ -129,7 +130,6 @@ fn startup_data_dir_mode(mode: &data_dir::DataDirMode) -> &'static str {
     match mode {
         data_dir::DataDirMode::Default => "default",
         data_dir::DataDirMode::EnvOverride => "env_override",
-        data_dir::DataDirMode::Portable { .. } => "portable",
     }
 }
 
@@ -190,6 +190,9 @@ fn show_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
 }
 
 fn prepare_main_window_for_display<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_title(app_platform::identity::APP_NAME);
+    }
     if let Some(decorations) = native_window_decorations_override(std::env::consts::OS) {
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.set_decorations(decorations);
@@ -260,7 +263,13 @@ pub(crate) fn refresh_native_menus(_app: &tauri::AppHandle) -> tauri::Result<()>
 fn build_tray_menu<R: tauri::Runtime, M: Manager<R>>(manager: &M) -> tauri::Result<tauri::menu::Menu<R>> {
     use tauri::menu::{MenuBuilder, MenuItem};
 
-    let show = MenuItem::with_id(manager, "show-main", "显示 MyApp", true, None::<&str>)?;
+    let show = MenuItem::with_id(
+        manager,
+        "show-main",
+        format!("显示 {}", app_platform::identity::APP_NAME),
+        true,
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(manager, "quit-app", "退出", true, None::<&str>)?;
     MenuBuilder::new(manager).items(&[&show, &quit]).build()
 }
@@ -410,8 +419,7 @@ pub fn run() {
                 "data dir ready mode={}",
                 startup_data_dir_mode(&data_dir_resolution.mode)
             ));
-            let alternative_data_dir = data_dir::alternative_data_dir(&data_dir_resolution);
-            match app_core::storage::maybe_import_user_data_db(&data_dir, alternative_data_dir.as_deref()) {
+            match app_core::storage::maybe_import_user_data_db(&data_dir, None) {
                 Ok(result) => eprintln!("[STARTUP] data db fallback import: {result:?}"),
                 Err(err) => eprintln!("[STARTUP] data db fallback import failed: {err}"),
             }
@@ -545,6 +553,13 @@ pub fn run() {
                 // 开机自启动
                 commands::autostart::get_autostart_enabled,
                 commands::autostart::set_autostart_enabled,
+                // 启动管理
+                commands::launcher::list_launch_items,
+                commands::launcher::launch_item,
+                commands::launcher::stop_launch_item,
+                commands::launcher::list_launch_statuses,
+                commands::ports::scan_local_ports,
+                commands::ports::stop_port_processes,
                 // 窗口
                 commands::window_controls::set_macos_traffic_light_position,
                 // 更新
@@ -584,7 +599,7 @@ pub fn run() {
             ],
         )))
         .build(tauri::generate_context!())
-        .inspect(|app| {
+        .inspect(|_app| {
             append_startup_probe(format!("tauri application built after {:?}", startup_begin.elapsed()));
         })
         .expect("error while building MyApp")
